@@ -1,8 +1,9 @@
-"""Centralized structured logging for the pipeline.
+"""Centralized component-level logging for the pipeline.
 
-Every log line is JSON with ``request_id`` and ``stage`` attached, so a
-broken chain is traceable: filter by ``request_id`` to see the full path,
-the ``stage_error`` line marks exactly where it broke.
+Every log line is JSON with ``request_id``, ``component``, and ``stage``
+attached, so a broken chain is traceable: filter by ``request_id`` to see
+the full path, the ``stage_error`` line (with its ``component``) marks
+exactly which component and stage broke.
 
 Stdlib only. Usage::
 
@@ -10,7 +11,7 @@ Stdlib only. Usage::
 
     logger = get_logger(__name__)
     new_request_id()
-    with stage("identifier"):
+    with stage("identifier", component="indexing"):
         ...  # enter/exit lines emitted automatically, errors logged + reraised
 """
 
@@ -33,6 +34,9 @@ _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _stage: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "production_rag_stage", default=None
 )
+_component: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "production_rag_component", default=None
+)
 
 _configured = False
 
@@ -49,12 +53,17 @@ class _JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
             "request_id": _request_id.get(),
+            "component": getattr(record, "component_override", None)
+            or _component.get(),
             "stage": getattr(record, "stage_override", None) or _stage.get(),
         }
         if record.exc_info:
             payload["traceback"] = self.formatException(record.exc_info)
         for key, value in record.__dict__.items():
-            if key not in _STANDARD_ATTRS and key != "stage_override":
+            if key not in _STANDARD_ATTRS and key not in (
+                "stage_override",
+                "component_override",
+            ):
                 payload[key] = value
         return json.dumps(payload, default=str)
 
@@ -95,17 +104,30 @@ def set_request_id(value: str) -> None:
     _request_id.set(value)
 
 
+def set_component(name: str) -> None:
+    """Bind the owning component (indexing, storage, retrieval, ...).
+
+    Prefer passing ``component=`` to :func:`stage`, which binds and resets
+    automatically; use this only for long-lived component entry points.
+    """
+    _component.set(name)
+
+
 @contextmanager
-def stage(name: str) -> Iterator[None]:
+def stage(name: str, component: str | None = None) -> Iterator[None]:
     """Mark a pipeline stage; logs enter/exit and pinpoints failures.
 
-    On exception an ERROR ``stage_error`` line (with traceback) is logged
-    for this stage, then the exception is reraised unchanged.
+    ``component`` binds the owning pillar for the block (e.g.
+    ``component="indexing"``) and is reset on exit, so the ``stage_error``
+    line always names the component where the chain broke. On exception an
+    ERROR ``stage_error`` line (with traceback) is logged, then the
+    exception is reraised unchanged.
     """
     logger = get_logger("production_rag.stage")
-    token = _stage.set(name)
+    stage_token = _stage.set(name)
+    component_token = _component.set(component) if component is not None else None
     start = time.perf_counter()
-    logger.info("stage_enter", extra={"stage_override": name})
+    logger.info("stage_enter")
     try:
         yield
     except Exception as exc:
@@ -115,22 +137,34 @@ def stage(name: str) -> Iterator[None]:
             type(exc).__name__,
             exc,
             exc_info=True,
-            extra={"stage_override": name, "duration_ms": duration_ms},
+            extra={"duration_ms": duration_ms},
         )
+        _stage.reset(stage_token)
+        if component_token is not None:
+            _component.reset(component_token)
         raise
     duration_ms = round((time.perf_counter() - start) * 1000, 2)
-    logger.info(
-        "stage_exit", extra={"stage_override": name, "duration_ms": duration_ms}
-    )
-    _stage.reset(token)
+    logger.info("stage_exit", extra={"duration_ms": duration_ms})
+    _stage.reset(stage_token)
+    if component_token is not None:
+        _component.reset(component_token)
 
 
-def log_stage(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Decorator version of :func:`stage` using the function name."""
+def log_stage(
+    func: Callable[..., Any] | None = None, *, component: str | None = None
+) -> Callable[..., Any]:
+    """Decorator version of :func:`stage` using the function name.
 
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        with stage(func.__name__):
-            return func(*args, **kwargs)
+    Usable bare (``@log_stage``) or with a component
+    (``@log_stage(component="indexing")``).
+    """
 
-    return wrapper
+    def decorate(target: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(target)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with stage(target.__name__, component=component):
+                return target(*args, **kwargs)
+
+        return wrapper
+
+    return decorate(func) if func is not None else decorate

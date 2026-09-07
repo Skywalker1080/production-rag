@@ -46,7 +46,13 @@ _Avoid_: chunk, embedding, record (no shape decided)
 The cleaning applied so different formats share one Document contract.
 _Avoid_: parsing, chunking, embedding
 
+## Agreed decisions
+
+- **Metadata groups**: provenance (where/when) + structural/positional + categorization/semantic are in; access control/governance is out of scope. Exact per-stage fields pending.
+- **Document home**: Document lives in indexing until vector-DB ingest.
+- **Execution model**: pre-retrieval work is programmatic flow; LangGraph orchestrates retrieval → synthesis → eval only.
+
 ## Undecided (explicitly not assumed)
 
-- Chunking strategy, embedding model, storage engine, retrieval SLAs, LLM choice, eval metrics.
+- Chunking strategy, embedding model, storage engine, retrieval SLAs, LLM choice, eval metrics, exact per-stage metadata fields.
 - Anything not listed above has no decision yet.
