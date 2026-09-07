@@ -42,6 +42,18 @@ Pydantic v2 (consistent with MVP `sample.py`). `Document` and metadata
 live in `indexing/document.py` — Document home is indexing until
 vector-DB ingest (CONTEXT.md).
 
+### 3.3 Immutability boundary (decided)
+
+`Document` is a frozen source-level record: it is never mutated after
+extraction. Rationale: each stage only knows its own facts — the
+extractor cannot know pages or chunk boundaries, so positional metadata
+(`chunk_id`, index, prev/next, page, headings) can only be born in the
+chunker. It will live on a future `Chunk` type (plan 0002), each chunk
+carrying `doc_id` as parent link. Citation-critical fields (`file_name`,
+source) are denormalized onto chunks so retrieval hits stay
+self-contained; full provenance stays on the parent. Re-chunking =
+delete chunks for `doc_id` and re-run; the parent `Document` is untouched.
+
 ## 4. Pipeline steps (in order)
 
 1. **Read once**: `Path.read_bytes()`. Single read; everything downstream
