@@ -16,6 +16,11 @@ decode, provenance metadata, error taxonomy, logging, tests.
 Out: md/html/pdf normalizers, markdownify/Unstructured pass, chunking,
 language detection (`language` field marked TBD, not emitted).
 
+Cleaned-Document bar (format-universal): every normalizer — txt here,
+md/html/pdf in their own plans — returns a `Document` with cleaned
+content per the §3 contract (no markup, no binary junk, no leaked
+config). Html/pdf acceptance is tracked in #3/#4, tightened to this bar.
+
 ## 3. Contract
 
 ```python
