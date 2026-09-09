@@ -15,7 +15,11 @@ from pydantic import BaseModel, ConfigDict
 
 
 class DocumentMetadata(BaseModel):
-    """Provenance subset the Text Extractor emits (plan 0001 section 3.1)."""
+    """Provenance subset every extractor emits, plus optional semantic
+    fields (plan 0004 section 3.2) that only frontmatter-bearing formats
+    set. Strict model stays `forbid`: new fields are added here, never
+    smuggled through.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -26,6 +30,10 @@ class DocumentMetadata(BaseModel):
     byte_size: int
     detected_mime: str
     encoding: str
+    title: str | None = None
+    tags: list[str] | None = None
+    language: str | None = None
+    doc_date: str | None = None
 
 
 class Document(BaseModel):
@@ -38,9 +46,17 @@ class Document(BaseModel):
 
 
 def make_metadata(
-    path: Path, raw: bytes, mime: str, encoding: str
+    path: Path,
+    raw: bytes,
+    mime: str,
+    encoding: str,
+    title: str | None = None,
+    tags: list[str] | None = None,
+    language: str | None = None,
+    doc_date: str | None = None,
 ) -> DocumentMetadata:
-    """Assemble the provenance subset identically for every extractor."""
+    """Assemble metadata identically for every extractor; semantic
+    fields stay `None` unless the caller sets them."""
     return DocumentMetadata(
         doc_id=uuid.uuid4().hex,
         file_name=path.name,
@@ -49,4 +65,8 @@ def make_metadata(
         byte_size=len(raw),
         detected_mime=mime,
         encoding=encoding,
+        title=title,
+        tags=tags,
+        language=language,
+        doc_date=doc_date,
     )

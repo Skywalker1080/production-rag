@@ -20,6 +20,7 @@ from production_rag.indexing.errors import (
     UnsupportedFormatError,
 )
 from production_rag.indexing.html import HtmlExtractor
+from production_rag.indexing.markdown import MdExtractor
 from production_rag.indexing.pdf import PdfExtractor
 from production_rag.indexing.text import TextExtractor
 
@@ -38,6 +39,7 @@ def _register(extractor: Extractor) -> None:
 _register(TextExtractor())
 _register(HtmlExtractor())
 _register(PdfExtractor())
+_register(MdExtractor())
 
 _EXTENSION_FAMILY = {
     ".txt": "text",
@@ -62,9 +64,14 @@ def identify(raw: bytes, filename: str = "") -> tuple[str, str]:
         return "pdf", mime
     if mime == "text/html":
         return "html", mime
+    if mime == "text/markdown":
+        return "markdown", mime
     if mime.startswith("text/"):
-        if Path(filename).suffix.lower() in (".html", ".htm"):
+        suffix = Path(filename).suffix.lower()
+        if suffix in (".html", ".htm"):
             return "html", mime
+        if suffix == ".md":
+            return "markdown", mime
         return "text", mime
     return "unknown", mime
 
