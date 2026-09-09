@@ -36,8 +36,16 @@ Extractor interface every format implements (`indexing/base.py`):
 ```python
 class Extractor(Protocol):
     kinds: ClassVar[tuple[str, ...]]  # registry key(s), e.g. ("text",)
-    def extract(self, path: Path, raw: bytes) -> Document: ...
+    def extract(
+        self, path: Path, raw: bytes, mime: str, encoding: str | None = None
+    ) -> Document: ...
 ```
+
+`encoding` is an explicit operator override, added during TDD: short
+single-byte texts are information-theoretically ambiguous between
+legacy encodings (verified: latin-1 fixture misdetects as cp775 at
+chaos 0.0), so a caller with out-of-band knowledge bypasses the guess.
+`ingest()` threads it through.
 
 - Input: path to a candidate file; extractors receive already-read bytes
   (no I/O inside normalizers, keeps them pure and testable).
@@ -94,9 +102,12 @@ delete chunks for `doc_id` and re-run; the parent `Document` is untouched.
    `FileTooLargeError`. Fail fast, before routing. Extractors own only
    format validation, never size/empty checks.
 4. **Route + extract**: registry lookup by kind →
-   `TextExtractor.extract(path, raw)` in
-   `stage("txt_normalize", component="indexing")`. Decode via the shared
-   helper (`charset_normalizer`, best match, from memory). Undecodable →
+   `TextExtractor.extract(path, raw, mime, encoding)` in
+   `stage("txt_normalize", component="indexing")` (each normalizer opens
+   its own stage). Decode order, hardened during TDD: UTF-8 strict first
+   (standard form — deterministic, never guessed; fixes a real
+   misdetection where short latin-1 decoded to wrong glyphs), explicit
+   `encoding` override second, `charset_normalizer` last. Undecodable →
    `UnsupportedFormatError` chained from decoder error. Heavy per-format
    deps always import lazily inside their extractor — the dispatcher
    stays light.
@@ -114,8 +125,9 @@ digging tracebacks).
 
 - `charset-normalizer` (direct; today only transitive via requests).
 - `python-magic` (locked per user).
-- Windows caveat: libmagic DLL required. If import fails on Windows,
-  `uv add python-magic-bin` (bundles the DLL). No code change either way.
+- Windows caveat: libmagic DLL required. Verified missing on this
+  machine (`failed to find libmagic`), so `python-magic-bin` was added
+  alongside. No code change either way.
 
 ## 7. Files
 

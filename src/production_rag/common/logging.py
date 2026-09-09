@@ -82,7 +82,7 @@ def configure(
     handler = logging.StreamHandler(stream or sys.stdout)
     handler.setFormatter(_JsonFormatter())
     root.addHandler(handler)
-    root.setLevel((level or os.getenv("LOG_LEVEL", "INFO")).upper())
+    root.setLevel((level or os.getenv("LOG_LEVEL") or "INFO").upper())
     _configured = True
 
 
