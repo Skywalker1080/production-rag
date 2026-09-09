@@ -1,0 +1,80 @@
+"""HTML Extractor tests (plan 0002, stdlib unittest).
+
+Seams: identify() kind mapping, registry conformance, HtmlExtractor
+output contract, ingest() end-to-end on fixtures.
+"""
+
+import unittest
+from pathlib import Path
+
+from production_rag.indexing import dispatcher
+from production_rag.indexing.base import Extractor
+from production_rag.indexing.dispatcher import identify
+from production_rag.indexing.document import Document
+from production_rag.indexing.errors import UnsupportedFormatError
+from production_rag.indexing.html import HtmlExtractor
+
+
+class IdentifyTests(unittest.TestCase):
+    def test_html_bytes_map_to_html_kind(self) -> None:
+        kind, mime = identify(b"<html><body><p>hi</p></body></html>")
+        self.assertEqual(kind, "html")
+        self.assertEqual(mime, "text/html")
+
+    def test_plain_text_still_maps_to_text_kind(self) -> None:
+        kind, _ = identify(b"just words")
+        self.assertEqual(kind, "text")
+
+
+class HtmlExtractorTests(unittest.TestCase):
+    def test_wellformed_page_returns_cleaned_document(self) -> None:
+        raw = Path("tests/fixtures/sample_page.html").read_bytes()
+        doc = HtmlExtractor().extract(
+            Path("sample_page.html"), raw, "text/html"
+        )
+        self.assertIsInstance(doc, Document)
+        self.assertIn("Revenue grew 12 percent", doc.content)
+        self.assertIn("Expenses", doc.content)
+        self.assertNotIn("<", doc.content)
+        self.assertNotIn("must not appear", doc.content)
+        self.assertNotIn("color: red", doc.content)
+        self.assertEqual(doc.metadata.detected_mime, "text/html")
+
+    def test_malformed_nesting_repairs_without_loss(self) -> None:
+        raw = Path("tests/fixtures/sample_malformed.html").read_bytes()
+        doc = HtmlExtractor().extract(
+            Path("sample_malformed.html"), raw, "text/html"
+        )
+        for sentence in (
+            "Broken Report",
+            "First half of the story",
+            "Second half of the story",
+            "bold tail",
+        ):
+            self.assertIn(sentence, doc.content)
+
+    def test_page_without_visible_text_fails_loudly(self) -> None:
+        raw = b"<html><body><script>only code</script></body></html>"
+        with self.assertRaises(UnsupportedFormatError):
+            HtmlExtractor().extract(Path("empty.html"), raw, "text/html")
+
+    def test_table_text_present_without_fidelity_claim(self) -> None:
+        raw = Path("tests/fixtures/sample_page.html").read_bytes()
+        doc = HtmlExtractor().extract(
+            Path("sample_page.html"), raw, "text/html"
+        )
+        self.assertIn("Q3", doc.content)
+
+    def test_registered_html_extractor_satisfies_protocol(self) -> None:
+        extractor = dispatcher.REGISTRY["html"]
+        self.assertIsInstance(extractor, Extractor)
+        self.assertIn("html", extractor.kinds)
+
+    def test_ingest_html_fixture_end_to_end(self) -> None:
+        doc = dispatcher.ingest("tests/fixtures/sample_page.html")
+        self.assertIsInstance(doc, Document)
+        self.assertEqual(doc.metadata.file_name, "sample_page.html")
+
+
+if __name__ == "__main__":
+    unittest.main()

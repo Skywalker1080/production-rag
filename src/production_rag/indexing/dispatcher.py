@@ -19,6 +19,7 @@ from production_rag.indexing.errors import (
     FileTooLargeError,
     UnsupportedFormatError,
 )
+from production_rag.indexing.html import HtmlExtractor
 from production_rag.indexing.text import TextExtractor
 
 MAX_BYTES = 100 * 1024 * 1024  # draft cap; config later (plan 0001)
@@ -34,6 +35,7 @@ def _register(extractor: Extractor) -> None:
 
 
 _register(TextExtractor())
+_register(HtmlExtractor())
 
 _EXTENSION_FAMILY = {
     ".txt": "text",
@@ -49,6 +51,8 @@ def identify(raw: bytes) -> tuple[str, str]:
     mime = magic.from_buffer(raw, mime=True)
     if mime == "application/pdf":
         return "pdf", mime
+    if mime == "text/html":
+        return "html", mime
     if mime.startswith("text/"):
         return "text", mime
     return "unknown", mime

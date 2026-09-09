@@ -7,6 +7,10 @@ extraction. Chunk-born facts live on the future `Chunk` type, linked by
 
 from __future__ import annotations
 
+import hashlib
+import uuid
+from pathlib import Path
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -31,3 +35,18 @@ class Document(BaseModel):
 
     content: str
     metadata: DocumentMetadata
+
+
+def make_metadata(
+    path: Path, raw: bytes, mime: str, encoding: str
+) -> DocumentMetadata:
+    """Assemble the provenance subset identically for every extractor."""
+    return DocumentMetadata(
+        doc_id=uuid.uuid4().hex,
+        file_name=path.name,
+        file_path=str(path.resolve()),
+        sha256=hashlib.sha256(raw).hexdigest(),
+        byte_size=len(raw),
+        detected_mime=mime,
+        encoding=encoding,
+    )

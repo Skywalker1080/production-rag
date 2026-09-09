@@ -39,7 +39,10 @@ logging. Immutability boundary (§3.3) unchanged.
    `script`/`style`/`noscript`; keep visible text order.
 3. **Markdown shape**: lazy `unstructured` import INSIDE the extractor
    (`partition_html`), so nltk/torch cost never touches dispatcher or
-   txt paths. Elements → shared markdown string downstream systems see.
+   txt paths. Elements → shared markdown string: `Title` elements get a
+   `# ` prefix, all others join as plain paragraphs. No-visible-text
+   pages raise `UnsupportedFormatError` (loud, consistent with the
+   scanned-pdf rule) instead of returning an empty Document.
 4. **Metadata + Document**: identical to txt (sha256, size, mime,
    encoding used).
 
