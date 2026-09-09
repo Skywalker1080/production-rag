@@ -31,7 +31,11 @@ class HtmlExtractor:
         self, path: Path, raw: bytes, mime: str, encoding: str | None = None
     ) -> Document:
         with stage("html_normalize", component="indexing"):
-            if mime != "text/html":
+            # Any text/* is safe: tag-free input passes through unchanged,
+            # markup gets repaired and stripped. Non-text never arrives —
+            # the dispatcher routes it elsewhere. `mime` is recorded
+            # verbatim in metadata for traceability.
+            if not mime.startswith("text/"):
                 raise UnsupportedFormatError(path.name, mime)
             text, detected = decode(raw, path.name, encoding)
             soup = BeautifulSoup(text, "html5lib")

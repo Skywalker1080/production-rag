@@ -6,6 +6,7 @@ output contract, ingest() end-to-end on fixtures.
 
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from production_rag.indexing import dispatcher
 from production_rag.indexing.base import Extractor
@@ -23,6 +24,23 @@ class IdentifyTests(unittest.TestCase):
 
     def test_plain_text_still_maps_to_text_kind(self) -> None:
         kind, _ = identify(b"just words")
+        self.assertEqual(kind, "text")
+
+    def test_generic_sniff_with_html_extension_breaks_toward_html(self) -> None:
+        raw = b"<html><body><p>code-heavy page</p></body></html>"
+        with mock.patch.object(
+            dispatcher.magic, "from_buffer", return_value="text/x-python"
+        ):
+            kind, mime = identify(raw, "page.html")
+        self.assertEqual(kind, "html")
+        self.assertEqual(mime, "text/x-python")
+
+    def test_generic_sniff_without_html_extension_stays_text(self) -> None:
+        raw = b"print('hi')"
+        with mock.patch.object(
+            dispatcher.magic, "from_buffer", return_value="text/x-python"
+        ):
+            kind, _ = identify(raw, "script.txt")
         self.assertEqual(kind, "text")
 
 
@@ -64,6 +82,28 @@ class HtmlExtractorTests(unittest.TestCase):
             Path("sample_page.html"), raw, "text/html"
         )
         self.assertIn("Q3", doc.content)
+
+    def test_code_sniffed_html_ingests_cleaned_end_to_end(self) -> None:
+        # Regression: libmagic reads code-heavy HTML as text/x-python;
+        # the tiebreak must still deliver a tag-free Document.
+        import tempfile
+
+        raw = Path("tests/fixtures/sample_page.html").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp) / "page.html"
+            page.write_bytes(raw)
+            with mock.patch.object(
+                dispatcher.magic, "from_buffer", return_value="text/x-python"
+            ):
+                doc = dispatcher.ingest(page)
+        self.assertNotIn("<", doc.content)
+        self.assertIn("Revenue grew 12 percent", doc.content)
+
+    def test_non_text_mime_rejected_at_extractor(self) -> None:
+        with self.assertRaises(UnsupportedFormatError):
+            HtmlExtractor().extract(
+                Path("doc.pdf"), b"%PDF-1.4", "application/pdf"
+            )
 
     def test_registered_html_extractor_satisfies_protocol(self) -> None:
         extractor = dispatcher.REGISTRY["html"]

@@ -31,9 +31,14 @@ logging. Immutability boundary (§3.3) unchanged.
 ## 4. Pipeline steps
 
 1. **Route**: dispatcher `identify()` maps `text/html` → `html` kind
-   (today all `text/*` → `text`; this is the one dispatcher change:
-   exact-match html before the `text/` prefix rule). Registry gains
-   `"html": HtmlExtractor()`. `.htm`/`.html` extension hints added.
+   (exact-match before the `text/` prefix rule). Tiebreak, added after
+   a live find: libmagic reads code-heavy HTML as `text/x-python`, so a
+   generic `text/*` sniff on `.html`/`.htm` also routes html — safe
+   direction, since `HtmlExtractor` passes tag-free input through
+   unchanged while `TextExtractor` leaks tags over markup. Registry
+   gains `"html": HtmlExtractor()`. `.htm`/`.html` extension hints
+   added. The extractor gate accepts any `text/*` for the same reason;
+   `detected_mime` records the raw sniff verbatim.
 2. **Repair + strip**: bs4 with `html5lib` parser (repairs broken trees
    on the fly — no regex stripping, per user decision). Drop
    `script`/`style`/`noscript`; keep visible text order.

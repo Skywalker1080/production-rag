@@ -46,14 +46,23 @@ _EXTENSION_FAMILY = {
 }
 
 
-def identify(raw: bytes) -> tuple[str, str]:
-    """Sniff `raw` content → (kind, mime). Never trusts the extension."""
+def identify(raw: bytes, filename: str = "") -> tuple[str, str]:
+    """Sniff `raw` content → (kind, mime).
+
+    Content leads; the extension only breaks ties a sniff cannot win:
+    libmagic misreads code-heavy HTML as e.g. text/x-python, so a generic
+    text/* sniff on a .html/.htm file routes html. Safe direction —
+    HtmlExtractor passes plain text through unchanged, while
+    TextExtractor leaks tags over markup.
+    """
     mime = magic.from_buffer(raw, mime=True)
     if mime == "application/pdf":
         return "pdf", mime
     if mime == "text/html":
         return "html", mime
     if mime.startswith("text/"):
+        if Path(filename).suffix.lower() in (".html", ".htm"):
+            return "html", mime
         return "text", mime
     return "unknown", mime
 
@@ -80,7 +89,7 @@ def ingest(path: str | Path, encoding: str | None = None) -> Document:
                 extra={"file_name": target.name, "byte_size": len(raw)},
             )
             raise FileTooLargeError(target.name, len(raw), MAX_BYTES)
-        kind, mime = identify(raw)
+        kind, mime = identify(raw, target.name)
         hinted = _EXTENSION_FAMILY.get(target.suffix.lower())
         if hinted is not None and hinted != kind and kind != "unknown":
             logger.warning(
