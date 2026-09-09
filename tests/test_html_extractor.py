@@ -127,5 +127,35 @@ class HtmlExtractorTests(unittest.TestCase):
         self.assertIn("Backpropagation", doc.content)
 
 
+class ExtensionMismatchTests(unittest.TestCase):
+    """Real-world bytes under wrong extensions; content must still win
+    (or degrade harmlessly) in both directions."""
+
+    def test_real_html_mislabeled_txt_still_cleaned(self) -> None:
+        import tempfile
+
+        raw = Path("tests/fixtures/html/unhappy_code_heavy.html").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            disguised = Path(tmp) / "report.txt"
+            disguised.write_bytes(raw)
+            doc = dispatcher.ingest(disguised)
+        self.assertNotIn("<html", doc.content)
+        self.assertIn("Demystifying Deep Learning", doc.content)
+
+    def test_real_text_mislabeled_html_loses_no_text(self) -> None:
+        # Tiebreak routes html; the extractor normalizes whitespace but
+        # must fabricate no tags and drop no rows.
+        import tempfile
+
+        raw = Path("tests/fixtures/txt/happy_utf8.txt").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            disguised = Path(tmp) / "notes.html"
+            disguised.write_bytes(raw)
+            doc = dispatcher.ingest(disguised)
+        self.assertNotIn("<", doc.content)
+        for row in ("2026-01-05", "101.80", "日本語"):
+            self.assertIn(row, doc.content)
+
+
 if __name__ == "__main__":
     unittest.main()

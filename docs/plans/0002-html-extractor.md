@@ -33,11 +33,15 @@ logging. Immutability boundary (§3.3) unchanged.
 1. **Route**: dispatcher `identify()` maps `text/html` → `html` kind
    (exact-match before the `text/` prefix rule). Tiebreak, added after
    a live find: libmagic reads code-heavy HTML as `text/x-python`, so a
-   generic `text/*` sniff on `.html`/`.htm` also routes html — safe
-   direction, since `HtmlExtractor` passes tag-free input through
-   unchanged while `TextExtractor` leaks tags over markup. Registry
-   gains `"html": HtmlExtractor()`. `.htm`/`.html` extension hints
-   added. The extractor gate accepts any `text/*` for the same reason;
+   generic `text/*` sniff on `.html`/`.htm` also routes html. A
+   document-level markup marker (`<html`, `<!doctype html` in the head
+   8KB window) overrides ANY generic sniff — even under a `.txt` name —
+   because tag leakage into chunks hurts more than whitespace
+   normalization on plain text (verified: passthrough is not
+   byte-identical, Unstructured joins lines). Residual risk (prose
+   quoting full documents) accepted and logged. Registry gains
+   `"html": HtmlExtractor()`. `.htm`/`.html` extension hints added. The
+   extractor gate accepts any `text/*` for the same reason;
    `detected_mime` records the raw sniff verbatim.
 2. **Repair + strip**: bs4 with `html5lib` parser (repairs broken trees
    on the fly — no regex stripping, per user decision). Drop

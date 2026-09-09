@@ -7,6 +7,7 @@ wins over the file extension; disagreements are logged, never silent.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import magic
@@ -50,14 +51,29 @@ _EXTENSION_FAMILY = {
 }
 
 
+_HTML_DOCUMENT_MARKER = re.compile(rb"(?i)<\s*html[\s>]|<!doctype\s+html")
+_SNIFF_WINDOW = 8192
+
+
+def _looks_like_html_document(raw: bytes) -> bool:
+    """Document-level markup present in the head window?
+
+    Boolean presence test only (no parsing, no nesting risk). latin-1
+    decodes any bytes; markers are pure ASCII so the decode is exact.
+    """
+    return _HTML_DOCUMENT_MARKER.search(raw[:_SNIFF_WINDOW]) is not None
+
+
 def identify(raw: bytes, filename: str = "") -> tuple[str, str]:
     """Sniff `raw` content → (kind, mime).
 
     Content leads; the extension only breaks ties a sniff cannot win:
     libmagic misreads code-heavy HTML as e.g. text/x-python, so a generic
-    text/* sniff on a .html/.htm file routes html. Safe direction —
-    HtmlExtractor passes plain text through unchanged, while
-    TextExtractor leaks tags over markup.
+    text/* sniff on a .html/.htm file routes html. A document-level
+    markup marker overrides any generic sniff (even under a .txt name):
+    TextExtractor leaking tags over markup hurts more than HtmlExtractor
+    normalizing whitespace on plain text. Residual risk — prose quoting
+    a full HTML document — is accepted and logged.
     """
     mime = magic.from_buffer(raw, mime=True)
     if mime == "application/pdf":
@@ -67,6 +83,8 @@ def identify(raw: bytes, filename: str = "") -> tuple[str, str]:
     if mime == "text/markdown":
         return "markdown", mime
     if mime.startswith("text/"):
+        if _looks_like_html_document(raw):
+            return "html", mime
         suffix = Path(filename).suffix.lower()
         if suffix in (".html", ".htm"):
             return "html", mime
