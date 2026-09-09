@@ -20,6 +20,7 @@ from production_rag.indexing.errors import (
     UnsupportedFormatError,
 )
 from production_rag.indexing.html import HtmlExtractor
+from production_rag.indexing.pdf import PdfExtractor
 from production_rag.indexing.text import TextExtractor
 
 MAX_BYTES = 100 * 1024 * 1024  # draft cap; config later (plan 0001)
@@ -36,6 +37,7 @@ def _register(extractor: Extractor) -> None:
 
 _register(TextExtractor())
 _register(HtmlExtractor())
+_register(PdfExtractor())
 
 _EXTENSION_FAMILY = {
     ".txt": "text",

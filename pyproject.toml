@@ -23,3 +23,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/production_rag"]
+
+
+[dependency-groups]
+dev = [
+    "reportlab>=5.0.1",
+]
