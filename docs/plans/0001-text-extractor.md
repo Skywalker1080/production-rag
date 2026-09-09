@@ -12,7 +12,9 @@ identify → normalize → Document path that html/md/pdf will reuse.
 ## 2. Scope
 
 In: txt files only, magic gate, empty/size guards, encoding detection +
-decode, provenance metadata, error taxonomy, logging, tests.
+decode, provenance metadata, error taxonomy, logging, tests — plus the
+dispatcher + `Extractor` Protocol groundwork so later formats plug in
+without refactoring.
 Out: md/html/pdf normalizers, markdownify/Unstructured pass, chunking,
 language detection (`language` field marked TBD, not emitted).
 
@@ -23,14 +25,32 @@ config). Html/pdf acceptance is tracked in #3/#4, tightened to this bar.
 
 ## 3. Contract
 
+Public entry (dispatcher owns read → identify → guard → route → extract):
+
 ```python
-extract_text(path: str | Path) -> Document
+ingest(path: str | Path) -> Document
 ```
 
-- Input: path to a candidate `.txt` file.
+Extractor interface every format implements (`indexing/base.py`):
+
+```python
+class Extractor(Protocol):
+    kinds: ClassVar[tuple[str, ...]]  # registry key(s), e.g. ("text",)
+    def extract(self, path: Path, raw: bytes) -> Document: ...
+```
+
+- Input: path to a candidate file; extractors receive already-read bytes
+  (no I/O inside normalizers, keeps them pure and testable).
 - Output: `Document(content=<decoded str>, metadata=<provenance subset>)`.
 - Raises, never returns partials: `EmptyFileError`, `FileTooLargeError`,
   `UnsupportedFormatError`. Original exceptions chained (`raise ... from`).
+- Architecture (decided): identifier acts as detector + router.
+  `identify(raw)` sniffs content via magic (content wins over extension,
+  both logged on disagreement); `route(kind)` looks up the registry.
+  Adding a format = new module + one registry line; dispatcher logic is
+  never edited (Open/Closed). Each extractor owns one format (SRP).
+  txt and md share the decode helper but stay separate normalizers —
+  md's frontmatter allowlist must not leak into txt.
 
 ### 3.1 Provenance subset emitted (group 1, partial)
 
@@ -59,21 +79,27 @@ source) are denormalized onto chunks so retrieval hits stay
 self-contained; full provenance stays on the parent. Re-chunking =
 delete chunks for `doc_id` and re-run; the parent `Document` is untouched.
 
-## 4. Pipeline steps (in order)
+## 4. Pipeline steps (in order, all in dispatcher unless noted)
 
 1. **Read once**: `Path.read_bytes()`. Single read; everything downstream
    works from memory (no double-open).
-2. **Magic gate** (`stage("identifier", component="indexing")`):
-   `python-magic` on raw bytes. Accept text/* (and `inode/x-empty`,
-   empty handled next). Anything else → `UnsupportedFormatError` with
-   detected MIME. This runs BEFORE decoding — the detector mislabels
-   binary as text (verified: PNG header → big5hkscs).
-3. **Guards**: 0 bytes → `EmptyFileError`; `> MAX_BYTES` (100 MiB,
-   module constant, config later) → `FileTooLargeError`. Fail fast,
-   before decode.
-4. **Decode** (`stage("txt_normalize", component="indexing")`):
-   `charset_normalizer`, best match, decode from memory. Undecodable →
-   `UnsupportedFormatError` chained from decoder error.
+2. **Identify** (`stage("identifier", component="indexing")`):
+   `python-magic` on raw bytes → kind. Content sniff wins over extension;
+   on disagreement log a WARNING with both. Unknown kind →
+   `UnsupportedFormatError` here — never reaches an extractor. Identify
+   runs BEFORE decoding — the detector mislabels binary as text
+   (verified: PNG header → big5hkscs).
+3. **Guards** (dispatcher, format-agnostic): 0 bytes → `EmptyFileError`;
+   `> MAX_BYTES` (100 MiB, module constant, config later) →
+   `FileTooLargeError`. Fail fast, before routing. Extractors own only
+   format validation, never size/empty checks.
+4. **Route + extract**: registry lookup by kind →
+   `TextExtractor.extract(path, raw)` in
+   `stage("txt_normalize", component="indexing")`. Decode via the shared
+   helper (`charset_normalizer`, best match, from memory). Undecodable →
+   `UnsupportedFormatError` chained from decoder error. Heavy per-format
+   deps always import lazily inside their extractor — the dispatcher
+   stays light.
 5. **Metadata + Document**: sha256 over raw bytes, assemble subset,
    return `Document`.
 
@@ -96,7 +122,12 @@ digging tracebacks).
 - `src/production_rag/indexing/document.py` — `Document`, metadata model.
 - `src/production_rag/indexing/errors.py` — `IndexingError` base +
   `EmptyFileError`, `FileTooLargeError`, `UnsupportedFormatError`.
-- `src/production_rag/indexing/text.py` — `extract_text`, `MAX_BYTES`.
+- `src/production_rag/indexing/base.py` — `Extractor` Protocol + `decode`
+  helper shared by txt/md.
+- `src/production_rag/indexing/dispatcher.py` — `identify`, `route`
+  (registry), `ingest`, `MAX_BYTES`.
+- `src/production_rag/indexing/text.py` — `TextExtractor` (pure
+  normalizer, no I/O).
 - `tests/test_text_extractor.py` — cases below.
 
 ## 8. Tests (stdlib unittest)
@@ -107,6 +138,10 @@ digging tracebacks).
 - Oversized input → `FileTooLargeError` (monkeypatched small limit, not
   a real 100 MiB file).
 - Binary-with-.txt-extension → `UnsupportedFormatError`, MIME named.
+- Extension/content disagreement (e.g. HTML saved as `.txt`) routes by
+  sniffed content.
+- Registry: every registered extractor satisfies the `Extractor`
+  Protocol (conformance test — guards interface drift).
 - Metadata: sha256 matches fixture bytes; `doc_id` unique per call.
 - Logs: break inside stage emits `stage_error` with
   `component=indexing`.
