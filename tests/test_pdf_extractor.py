@@ -17,7 +17,7 @@ from production_rag.indexing.pdf import PdfExtractor
 
 class IdentifyTests(unittest.TestCase):
     def test_pdf_bytes_map_to_pdf_kind(self) -> None:
-        raw = Path("tests/fixtures/sample.pdf").read_bytes()
+        raw = Path("tests/fixtures/pdf/sample.pdf").read_bytes()
         kind, mime = identify(raw)
         self.assertEqual(kind, "pdf")
         self.assertEqual(mime, "application/pdf")
@@ -30,7 +30,7 @@ class IdentifyTests(unittest.TestCase):
 
 class PdfExtractorTests(unittest.TestCase):
     def test_two_pages_accumulate_in_order(self) -> None:
-        raw = Path("tests/fixtures/sample.pdf").read_bytes()
+        raw = Path("tests/fixtures/pdf/sample.pdf").read_bytes()
         doc = PdfExtractor().extract(
             Path("sample.pdf"), raw, "application/pdf"
         )
@@ -41,7 +41,7 @@ class PdfExtractorTests(unittest.TestCase):
         self.assertEqual(doc.metadata.detected_mime, "application/pdf")
 
     def test_scanned_pdf_fails_loudly(self) -> None:
-        raw = Path("tests/fixtures/sample_scanned.pdf").read_bytes()
+        raw = Path("tests/fixtures/pdf/sample_scanned.pdf").read_bytes()
         with self.assertRaises(UnsupportedFormatError) as ctx:
             PdfExtractor().extract(
                 Path("sample_scanned.pdf"), raw, "application/pdf"
@@ -49,7 +49,7 @@ class PdfExtractorTests(unittest.TestCase):
         self.assertIn("no extractable text", str(ctx.exception))
 
     def test_locked_pdf_fails_chained_not_hanging(self) -> None:
-        raw = Path("tests/fixtures/sample_locked.pdf").read_bytes()
+        raw = Path("tests/fixtures/pdf/sample_locked.pdf").read_bytes()
         with self.assertRaises(UnsupportedFormatError) as ctx:
             PdfExtractor().extract(
                 Path("sample_locked.pdf"), raw, "application/pdf"
@@ -57,16 +57,24 @@ class PdfExtractorTests(unittest.TestCase):
         self.assertIsNotNone(ctx.exception.__cause__)
 
     def test_mixed_pages_keep_text_skip_blank(self) -> None:
-        raw = Path("tests/fixtures/sample_mixed.pdf").read_bytes()
+        raw = Path("tests/fixtures/pdf/sample_mixed.pdf").read_bytes()
         doc = PdfExtractor().extract(
             Path("sample_mixed.pdf"), raw, "application/pdf"
         )
         self.assertIn("Only this page has words", doc.content)
 
     def test_ingest_pdf_fixture_end_to_end(self) -> None:
-        doc = dispatcher.ingest("tests/fixtures/sample.pdf")
+        doc = dispatcher.ingest("tests/fixtures/pdf/sample.pdf")
         self.assertEqual(doc.metadata.file_name, "sample.pdf")
         self.assertIn("opening sentence", doc.content)
+
+    def test_happy_real_world_pdf_ingests(self) -> None:
+        doc = dispatcher.ingest("tests/fixtures/pdf/happy_path.pdf")
+        self.assertTrue(len(doc.content) > 1000)
+
+    def test_unhappy_large_real_world_pdf_ingests(self) -> None:
+        doc = dispatcher.ingest("tests/fixtures/pdf/unhappy_path.pdf")
+        self.assertTrue(len(doc.content) > 1000)
 
 
 if __name__ == "__main__":

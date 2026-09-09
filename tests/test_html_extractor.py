@@ -46,9 +46,9 @@ class IdentifyTests(unittest.TestCase):
 
 class HtmlExtractorTests(unittest.TestCase):
     def test_wellformed_page_returns_cleaned_document(self) -> None:
-        raw = Path("tests/fixtures/sample_page.html").read_bytes()
+        raw = Path("tests/fixtures/html/happy_page.html").read_bytes()
         doc = HtmlExtractor().extract(
-            Path("sample_page.html"), raw, "text/html"
+            Path("happy_page.html"), raw, "text/html"
         )
         self.assertIsInstance(doc, Document)
         self.assertIn("Revenue grew 12 percent", doc.content)
@@ -59,9 +59,9 @@ class HtmlExtractorTests(unittest.TestCase):
         self.assertEqual(doc.metadata.detected_mime, "text/html")
 
     def test_malformed_nesting_repairs_without_loss(self) -> None:
-        raw = Path("tests/fixtures/sample_malformed.html").read_bytes()
+        raw = Path("tests/fixtures/html/unhappy_malformed.html").read_bytes()
         doc = HtmlExtractor().extract(
-            Path("sample_malformed.html"), raw, "text/html"
+            Path("unhappy_malformed.html"), raw, "text/html"
         )
         for sentence in (
             "Broken Report",
@@ -77,9 +77,9 @@ class HtmlExtractorTests(unittest.TestCase):
             HtmlExtractor().extract(Path("empty.html"), raw, "text/html")
 
     def test_table_text_present_without_fidelity_claim(self) -> None:
-        raw = Path("tests/fixtures/sample_page.html").read_bytes()
+        raw = Path("tests/fixtures/html/happy_page.html").read_bytes()
         doc = HtmlExtractor().extract(
-            Path("sample_page.html"), raw, "text/html"
+            Path("happy_page.html"), raw, "text/html"
         )
         self.assertIn("Q3", doc.content)
 
@@ -88,7 +88,7 @@ class HtmlExtractorTests(unittest.TestCase):
         # the tiebreak must still deliver a tag-free Document.
         import tempfile
 
-        raw = Path("tests/fixtures/sample_page.html").read_bytes()
+        raw = Path("tests/fixtures/html/happy_page.html").read_bytes()
         with tempfile.TemporaryDirectory() as tmp:
             page = Path(tmp) / "page.html"
             page.write_bytes(raw)
@@ -111,9 +111,20 @@ class HtmlExtractorTests(unittest.TestCase):
         self.assertIn("html", extractor.kinds)
 
     def test_ingest_html_fixture_end_to_end(self) -> None:
-        doc = dispatcher.ingest("tests/fixtures/sample_page.html")
+        doc = dispatcher.ingest("tests/fixtures/html/happy_page.html")
         self.assertIsInstance(doc, Document)
-        self.assertEqual(doc.metadata.file_name, "sample_page.html")
+        self.assertEqual(doc.metadata.file_name, "happy_page.html")
+
+    def test_unhappy_code_heavy_blog_ingests_tag_free(self) -> None:
+        # Reporter's real file: libmagic mis-sniffs it, tiebreak routes
+        # html. Locks the #9 fix to real bytes, not mocks.
+        doc = dispatcher.ingest("tests/fixtures/html/unhappy_code_heavy.html")
+        self.assertNotIn("<html", doc.content)
+        self.assertIn("Demystifying Deep Learning", doc.content)
+
+    def test_happy_blog_ingests_end_to_end(self) -> None:
+        doc = dispatcher.ingest("tests/fixtures/html/happy_blog.html")
+        self.assertIn("Backpropagation", doc.content)
 
 
 if __name__ == "__main__":

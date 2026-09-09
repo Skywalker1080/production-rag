@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demystifying Backpropagation: The Mathematics of Neural Learning</title>
+
+    <!-- MathJax Library for rendering LaTeX formulas -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* Base Reset */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            color: #2d3748;
+            background-color: #f8fafc;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem;
+        }
+
+        /* Navigation */
+        nav {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+
+        .nav-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 1.25rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: #2b6cb0;
+            text-decoration: none;
+        }
+
+        /* Article Typography */
+        header {
+            margin-bottom: 2.5rem;
+        }
+
+        .category {
+            display: inline-block;
+            background-color: #ebf8ff;
+            color: #2b6cb0;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            line-height: 1.3;
+            color: #1a202c;
+            margin-bottom: 0.75rem;
+        }
+
+        .meta {
+            font-size: 0.9rem;
+            color: #718096;
+            display: flex;
+            gap: 10px;
+        }
+
+        h2 {
+            font-size: 1.6rem;
+            color: #2d3748;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 0.4rem;
+        }
+
+        p {
+            margin-bottom: 1.25rem;
+            font-size: 1.05rem;
+        }
+
+        /* Math Display Blocks */
+        .math-block {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #3182ce;
+            padding: 1.25rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+            overflow-x: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        /* Highlight Boxes */
+        .note-box {
+            background-color: #f0fff4;
+            border: 1px solid #c6f6d5;
+            border-left: 4px solid #38a169;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        ul, ol {
+            margin-bottom: 1.25rem;
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 3rem;
+            border-top: 1px solid #e2e8f0;
+            color: #a0aec0;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="nav-container">
+            <a href="#" class="logo">Deep Learning Math</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <article>
+            <header>
+                <span class="category">Algorithm Deep Dive</span>
+                <h1>Demystifying Backpropagation: The Mathematics of Neural Learning</h1>
+                <div class="meta">
+                    <span>By Dr. Sarah Lin</span>
+                    <span>•</span>
+                    <span>6 min read</span>
+                </div>
+            </header>
+
+            <p>At the heart of deep learning training lies a fundamental algorithm: <strong>Backpropagation</strong> (Backward Propagation of Errors). It allows artificial neural networks to learn by calculating the gradient of the loss function with respect to every weight in the network via the calculus <em>Chain Rule</em>.</p>
+
+            <h2>1. The Forward Pass & Loss Calculation</h2>
+            <p>Before propagating backward, we perform a <em>Forward Pass</em> to compute predictions. For a single neuron, the weighted sum of inputs $z$ and activation output $a$ are computed as follows:</p>
+
+            <div class="math-block">
+                $$z = w \cdot x + b$$
+                $$a = \sigma(z)$$
+            </div>
+
+            <p>Where $\sigma$ is an activation function (e.g., Sigmoid or ReLU). If we use Mean Squared Error (MSE) for regression, the total Loss $L$ for a predicted output $\hat{y} = a$ against target $y$ is:</p>
+
+            <div class="math-block">
+                $$L = \frac{1}{2}(y - a)^2$$
+            </div>
+
+            <h2>2. The Core Mechanism: The Chain Rule</h2>
+            <p>To update the weight $w$ using Gradient Descent, we need to determine how changing $w$ impacts the total loss $L$. That is, we must compute the partial derivative $\frac{\partial L}{\partial w}$.</p>
+
+            <p>Since $w$ affects $z$, $z$ affects $a$, and $a$ affects $L$, we apply the calculus <strong>Chain Rule</strong>:</p>
+
+            <div class="math-block">
+                $$\frac{\partial L}{\partial w} = \frac{\partial L}{\partial a} \cdot \frac{\partial a}{\partial z} \cdot \frac{\partial z}{\partial w}$$
+            </div>
+
+            <h2>3. Computing the Partial Derivatives</h2>
+            <p>Let's differentiate each component individually:</p>
+
+            <ol>
+                <li>
+                    <strong>Derivative of Loss w.r.t Activation Output:</strong>
+                    $$\frac{\partial L}{\partial a} = \frac{\partial}{\partial a} \left( \frac{1}{2}(y - a)^2 \right) = -(y - a) = a - y$$
+                </li>
+                <li>
+                    <strong>Derivative of Activation w.r.t Weighted Input:</strong><br>
+                    Assuming a Sigmoid function $\sigma(z) = \frac{1}{1 + e^{-z}}$, its derivative is:
+                    $$\frac{\partial a}{\partial z} = \sigma'(z) = a(1 - a)$$
+                </li>
+                <li>
+                    <strong>Derivative of Weighted Input w.r.t Weight:</strong>
+                    $$\frac{\partial z}{\partial w} = \frac{\partial}{\partial w}(w x + b) = x$$
+                </li>
+            </ol>
+
+            <p>Combining all three terms, we arrive at the full gradient for weight $w$:</p>
+
+            <div class="math-block">
+                $$\frac{\partial L}{\partial w} = (a - y) \cdot a(1 - a) \cdot x$$
+            </div>
+
+            <h2>4. Weight & Bias Updates</h2>
+            <p>Once the gradient is calculated, we adjust the parameters in the opposite direction of the gradient to minimize the loss, scaled by the learning rate $\eta$:</p>
+
+            <div class="math-block">
+                $$w_{new} = w_{old} - \eta \cdot \frac{\partial L}{\partial w}$$
+                $$b_{new} = b_{old} - \eta \cdot \frac{\partial L}{\partial b}$$
+            </div>
+
+            <div class="note-box">
+                <strong>Key Takeaway:</strong> In a multi-layer deep network, error terms ($\delta$) are calculated at the output layer and iteratively propagated backward layer-by-layer toward the input layer.
+            </div>
+
+            <h2>Summary</h2>
+            <p>Without backpropagation, training deep networks with millions of parameters would be computationally infeasible. By efficiently computing derivatives step-by-step using the chain rule, neural networks can rapidly converge toward accurate predictions.</p>
+        </article>
+    </main>
+
+    <footer>
+        <p>&copy; Deep Learning Math Blog. Rendered using MathJax.</p>
+    </footer>
+
+</body>
+</html>

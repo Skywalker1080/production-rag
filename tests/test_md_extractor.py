@@ -16,8 +16,8 @@ from production_rag.indexing.markdown import MdExtractor
 
 class IdentifyTests(unittest.TestCase):
     def test_md_bytes_map_to_markdown_kind(self) -> None:
-        raw = Path("tests/fixtures/sample_doc.md").read_bytes()
-        kind, mime = identify(raw, "sample_doc.md")
+        raw = Path("tests/fixtures/md/happy_frontmatter.md").read_bytes()
+        kind, mime = identify(raw, "happy_frontmatter.md")
         self.assertEqual(kind, "markdown")
         self.assertEqual(mime, "text/plain")
 
@@ -50,37 +50,39 @@ class MetadataExtensionTests(unittest.TestCase):
 
 class MdExtractorTests(unittest.TestCase):
     def test_frontmatter_crosses_allowlist_only(self) -> None:
-        raw = Path("tests/fixtures/sample_doc.md").read_bytes()
-        doc = MdExtractor().extract(Path("sample_doc.md"), raw, "text/plain")
+        raw = Path("tests/fixtures/md/happy_frontmatter.md").read_bytes()
+        doc = MdExtractor().extract(Path("happy_frontmatter.md"), raw, "text/plain")
         self.assertEqual(doc.metadata.title, "RAG Notes")
         self.assertEqual(doc.metadata.tags, ["rag", "indexing"])
         self.assertEqual(doc.metadata.language, "en")
         self.assertEqual(doc.metadata.doc_date, "2026-09-01")
 
     def test_config_keys_leak_nowhere(self) -> None:
-        raw = Path("tests/fixtures/sample_doc.md").read_bytes()
-        doc = MdExtractor().extract(Path("sample_doc.md"), raw, "text/plain")
+        raw = Path("tests/fixtures/md/happy_frontmatter.md").read_bytes()
+        doc = MdExtractor().extract(Path("happy_frontmatter.md"), raw, "text/plain")
         self.assertNotIn("draft", doc.content)
         self.assertNotIn("hidden-slug", doc.content)
         self.assertNotIn("---", doc.content)
         self.assertIn("First real paragraph", doc.content)
 
     def test_no_frontmatter_ingests_with_nones(self) -> None:
-        raw = Path("tests/fixtures/sample_plain.md").read_bytes()
-        doc = MdExtractor().extract(Path("sample_plain.md"), raw, "text/plain")
+        raw = Path("tests/fixtures/md/plain_no_frontmatter.md").read_bytes()
+        doc = MdExtractor().extract(Path("plain_no_frontmatter.md"), raw, "text/plain")
         self.assertIn("No Frontmatter Here", doc.content)
         self.assertIsNone(doc.metadata.title)
         self.assertIsNone(doc.metadata.tags)
 
     def test_malformed_frontmatter_degrades_to_body(self) -> None:
-        raw = b"---\ntitle: [unclosed\n\nBody survives.\n"
-        doc = MdExtractor().extract(Path("broken.md"), raw, "text/plain")
+        raw = Path("tests/fixtures/md/unhappy_broken_frontmatter.md").read_bytes()
+        doc = MdExtractor().extract(
+            Path("unhappy_broken_frontmatter.md"), raw, "text/plain"
+        )
         self.assertIn("Body survives", doc.content)
 
     def test_ingest_md_fixture_end_to_end(self) -> None:
-        doc = dispatcher.ingest("tests/fixtures/sample_doc.md")
+        doc = dispatcher.ingest("tests/fixtures/md/happy_frontmatter.md")
         self.assertIsInstance(doc, Document)
-        self.assertEqual(doc.metadata.file_name, "sample_doc.md")
+        self.assertEqual(doc.metadata.file_name, "happy_frontmatter.md")
         self.assertEqual(doc.metadata.title, "RAG Notes")
 
 

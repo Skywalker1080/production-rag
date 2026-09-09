@@ -96,14 +96,14 @@ class TextExtractorTests(unittest.TestCase):
 
 class IngestTests(unittest.TestCase):
     def test_ingest_utf8_fixture_end_to_end(self) -> None:
-        doc = dispatcher.ingest("sample_japanese_utf8.txt")
+        doc = dispatcher.ingest("tests/fixtures/txt/happy_utf8.txt")
         self.assertIsInstance(doc, Document)
         self.assertIn("Financial Time-Series", doc.content)
         self.assertIn("日本語", doc.content)
-        self.assertEqual(doc.metadata.file_name, "sample_japanese_utf8.txt")
+        self.assertEqual(doc.metadata.file_name, "happy_utf8.txt")
 
     def test_ingest_latin1_fixture_with_override(self) -> None:
-        doc = dispatcher.ingest("sample_latin1.txt", encoding="latin-1")
+        doc = dispatcher.ingest("tests/fixtures/txt/unhappy_latin1.txt", encoding="latin-1")
         self.assertIn("Café, résumé, naïve", doc.content)
         self.assertEqual(doc.metadata.encoding, "latin-1")
 

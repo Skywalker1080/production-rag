@@ -10,7 +10,7 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
-HERE = Path(__file__).parent
+HERE = Path(__file__).parent / "pdf"
 
 
 def _text_pdf(path: Path, pages: list[str]) -> None:
