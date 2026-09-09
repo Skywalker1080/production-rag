@@ -28,7 +28,12 @@ class HtmlExtractor:
     kinds: ClassVar[tuple[str, ...]] = ("html",)
 
     def extract(
-        self, path: Path, raw: bytes, mime: str, encoding: str | None = None
+        self,
+        path: Path,
+        raw: bytes,
+        mime: str,
+        encoding: str | None = None,
+        file_path: str | None = None,
     ) -> Document:
         with stage("html_normalize", component="indexing"):
             # Any text/* is safe: tag-free input passes through unchanged,
@@ -48,7 +53,9 @@ class HtmlExtractor:
                 )
             return Document(
                 content=content,
-                metadata=make_metadata(path, raw, mime, detected),
+                metadata=make_metadata(
+                    path, raw, mime, detected, file_path=file_path
+                ),
             )
 
     @staticmethod

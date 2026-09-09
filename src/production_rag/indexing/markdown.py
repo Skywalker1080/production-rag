@@ -33,7 +33,12 @@ class MdExtractor:
     kinds: ClassVar[tuple[str, ...]] = ("markdown",)
 
     def extract(
-        self, path: Path, raw: bytes, mime: str, encoding: str | None = None
+        self,
+        path: Path,
+        raw: bytes,
+        mime: str,
+        encoding: str | None = None,
+        file_path: str | None = None,
     ) -> Document:
         with stage("md_normalize", component="indexing"):
             if not mime.startswith("text/"):
@@ -55,7 +60,9 @@ class MdExtractor:
                 )
             return Document(
                 content=body,
-                metadata=make_metadata(path, raw, mime, detected, **fields),
+                metadata=make_metadata(
+                    path, raw, mime, detected, file_path=file_path, **fields
+                ),
             )
 
     @staticmethod

@@ -23,9 +23,18 @@ class Extractor(Protocol):
     kinds: ClassVar[tuple[str, ...]]
 
     def extract(
-        self, path: Path, raw: bytes, mime: str, encoding: str | None = None
+        self,
+        path: Path,
+        raw: bytes,
+        mime: str,
+        encoding: str | None = None,
+        file_path: str | None = None,
     ) -> Document:
-        """Normalize `raw` into a `Document`; raise, never partial."""
+        """Normalize `raw` into a `Document`; raise, never partial.
+
+        `file_path` overrides the recorded source location (URL ingest
+        records the URL instead of a resolved local path).
+        """
         ...
 
 

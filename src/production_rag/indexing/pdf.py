@@ -25,7 +25,12 @@ class PdfExtractor:
     kinds: ClassVar[tuple[str, ...]] = ("pdf",)
 
     def extract(
-        self, path: Path, raw: bytes, mime: str, encoding: str | None = None
+        self,
+        path: Path,
+        raw: bytes,
+        mime: str,
+        encoding: str | None = None,
+        file_path: str | None = None,
     ) -> Document:
         del encoding  # PDFs carry their own encoding; override unused.
         with stage("pdf_normalize", component="indexing"):
@@ -46,5 +51,7 @@ class PdfExtractor:
                 )
             return Document(
                 content=content,
-                metadata=make_metadata(path, raw, mime, "pdf-text"),
+                metadata=make_metadata(
+                    path, raw, mime, "pdf-text", file_path=file_path
+                ),
             )

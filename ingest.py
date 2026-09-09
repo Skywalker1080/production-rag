@@ -43,8 +43,12 @@ def main(argv: list[str] | None = None) -> int:
             pass
     request_id = new_request_id()
     logger.info("manual ingest start", extra={"file_name": args.path})
+    is_url = args.path.startswith(("http://", "https://"))
     try:
-        doc = dispatcher.ingest(args.path, encoding=args.encoding)
+        if is_url:
+            doc = dispatcher.ingest_url(args.path, encoding=args.encoding)
+        else:
+            doc = dispatcher.ingest(args.path, encoding=args.encoding)
     except IndexingError as exc:
         print(f"REJECTED [{request_id}]: {exc}", file=sys.stderr)
         return 1

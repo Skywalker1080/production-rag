@@ -11,12 +11,14 @@ import re
 from pathlib import Path
 
 import magic
+import requests
 
 from production_rag.common.logging import get_logger, stage
 from production_rag.indexing.base import Extractor
 from production_rag.indexing.document import Document
 from production_rag.indexing.errors import (
     EmptyFileError,
+    FetchError,
     FileTooLargeError,
     UnsupportedFormatError,
 )
@@ -26,6 +28,8 @@ from production_rag.indexing.pdf import PdfExtractor
 from production_rag.indexing.text import TextExtractor
 
 MAX_BYTES = 100 * 1024 * 1024  # draft cap; config later (plan 0001)
+FETCH_TIMEOUT_S = 10
+_STREAM_CHUNK = 65536
 
 logger = get_logger(__name__)
 
@@ -105,27 +109,70 @@ def route(kind: str, file_name: str, mime: str) -> Extractor:
 def ingest(path: str | Path, encoding: str | None = None) -> Document:
     """Public entry: file path → cleaned `Document`. Raises, never partial."""
     target = Path(path)
-    raw = target.read_bytes()
+    return _finalize(target.name, target.suffix, target.read_bytes(), encoding)
+
+
+def ingest_url(url: str, encoding: str | None = None) -> Document:
+    """Public entry: http(s) URL → cleaned `Document`.
+
+    Fetches with timeout and streaming cap, then rejoins the shared
+    guard-route-extract tail: the sniff (not Content-Type) decides the
+    extractor. Raises `FetchError` on network failure, never partial.
+    """
+    from urllib.parse import urlparse
+
+    parts = urlparse(url)
+    if parts.scheme not in ("http", "https"):
+        raise FetchError(url, f"disallowed scheme: {parts.scheme or 'none'}")
+    hint = Path(parts.path.rsplit("/", 1)[-1]).name
+    display = hint or parts.netloc
+    with stage("fetch", component="indexing"):
+        try:
+            response = requests.get(url, stream=True, timeout=FETCH_TIMEOUT_S)
+            response.raise_for_status()
+            buf = bytearray()
+            for chunk in response.iter_content(_STREAM_CHUNK):
+                buf.extend(chunk)
+                if len(buf) > MAX_BYTES:
+                    raise FileTooLargeError(display, len(buf), MAX_BYTES)
+            raw = bytes(buf)
+        except FileTooLargeError:
+            raise
+        except requests.RequestException as exc:
+            raise FetchError(url, type(exc).__name__) from exc
+    return _finalize(display, Path(hint).suffix, raw, encoding, file_path=url)
+
+
+def _finalize(
+    display_name: str,
+    suffix: str,
+    raw: bytes,
+    encoding: str | None,
+    file_path: str | None = None,
+) -> Document:
+    """Shared guard-route-extract tail for file and URL ingest."""
     with stage("identifier", component="indexing"):
         if len(raw) == 0:
-            logger.warning("reject: empty file", extra={"file_name": target.name})
-            raise EmptyFileError(target.name)
+            logger.warning("reject: empty file", extra={"file_name": display_name})
+            raise EmptyFileError(display_name)
         if len(raw) > MAX_BYTES:
             logger.warning(
                 "reject: file too large",
-                extra={"file_name": target.name, "byte_size": len(raw)},
+                extra={"file_name": display_name, "byte_size": len(raw)},
             )
-            raise FileTooLargeError(target.name, len(raw), MAX_BYTES)
-        kind, mime = identify(raw, target.name)
-        hinted = _EXTENSION_FAMILY.get(target.suffix.lower())
+            raise FileTooLargeError(display_name, len(raw), MAX_BYTES)
+        kind, mime = identify(raw, display_name)
+        hinted = _EXTENSION_FAMILY.get(suffix.lower())
         if hinted is not None and hinted != kind and kind != "unknown":
             logger.warning(
                 "extension disagrees with content; trusting content",
                 extra={
-                    "file_name": target.name,
-                    "extension": target.suffix,
+                    "file_name": display_name,
+                    "extension": suffix,
                     "detected_mime": mime,
                 },
             )
-        extractor = route(kind, target.name, mime)
-    return extractor.extract(target, raw, mime, encoding)
+        extractor = route(kind, display_name, mime)
+    return extractor.extract(
+        Path(display_name), raw, mime, encoding, file_path=file_path
+    )

@@ -17,7 +17,12 @@ class TextExtractor:
     kinds: ClassVar[tuple[str, ...]] = ("text",)
 
     def extract(
-        self, path: Path, raw: bytes, mime: str, encoding: str | None = None
+        self,
+        path: Path,
+        raw: bytes,
+        mime: str,
+        encoding: str | None = None,
+        file_path: str | None = None,
     ) -> Document:
         with stage("txt_normalize", component="indexing"):
             if not mime.startswith("text/"):
@@ -25,5 +30,7 @@ class TextExtractor:
             content, detected = decode(raw, path.name, encoding)
             return Document(
                 content=content,
-                metadata=make_metadata(path, raw, mime, detected),
+                metadata=make_metadata(
+                    path, raw, mime, detected, file_path=file_path
+                ),
             )

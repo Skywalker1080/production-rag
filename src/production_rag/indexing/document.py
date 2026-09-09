@@ -54,13 +54,15 @@ def make_metadata(
     tags: list[str] | None = None,
     language: str | None = None,
     doc_date: str | None = None,
+    file_path: str | None = None,
 ) -> DocumentMetadata:
     """Assemble metadata identically for every extractor; semantic
-    fields stay `None` unless the caller sets them."""
+    fields stay `None` unless the caller sets them. `file_path`
+    overrides the resolved local path (URL sources record the URL)."""
     return DocumentMetadata(
         doc_id=uuid.uuid4().hex,
         file_name=path.name,
-        file_path=str(path.resolve()),
+        file_path=file_path if file_path is not None else str(path.resolve()),
         sha256=hashlib.sha256(raw).hexdigest(),
         byte_size=len(raw),
         detected_mime=mime,

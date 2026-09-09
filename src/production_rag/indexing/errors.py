@@ -40,3 +40,10 @@ class UnsupportedFormatError(IndexingError):
     def __init__(self, file_name: str, detected_mime: str) -> None:
         self.detected_mime = detected_mime
         super().__init__(file_name, f"unsupported content: {detected_mime}")
+
+
+class FetchError(IndexingError):
+    """URL fetch failed: bad scheme, network error, HTTP error."""
+
+    def __init__(self, url: str, reason: str) -> None:
+        super().__init__(url, f"fetch failed: {reason}")
