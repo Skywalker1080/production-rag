@@ -2,6 +2,7 @@
 
 import io
 import json
+import logging
 import unittest
 
 from production_rag.common import logging as plog
@@ -14,6 +15,13 @@ def _lines(buf: io.StringIO) -> list[dict]:
 class LoggingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.buf = io.StringIO()
+        plog.configure(level="DEBUG", stream=self.buf, force=True)
+
+    def tearDown(self) -> None:
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+            handler.close()
         plog.configure(level="DEBUG", stream=self.buf, force=True)
 
     def test_json_shape_and_context(self) -> None:
@@ -38,6 +46,28 @@ class LoggingTests(unittest.TestCase):
         self.assertTrue(all(line["stage"] == "identifier" for line in lines))
         exit_line = lines[-1]
         self.assertIn("duration_ms", exit_line)
+
+    def test_file_handler_appends_structured_lines(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = str(Path(tmp) / "nested" / "pipeline.jsonl")
+            plog.configure(stream=self.buf, file=target, force=True)
+            plog.get_logger("test.file").info("to file")
+            lines = Path(target).read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 1)
+            import json as _json
+
+            self.assertEqual(_json.loads(lines[0])["message"], "to file")
+            # Windows locks open files: release before tmp cleanup.
+            root = logging.getLogger()
+            for handler in list(root.handlers):
+                if isinstance(
+                    handler, logging.handlers.RotatingFileHandler
+                ):
+                    root.removeHandler(handler)
+                    handler.close()
 
     def test_component_bound_to_stage_and_reset_after(self) -> None:
         logger = plog.get_logger("test.component")

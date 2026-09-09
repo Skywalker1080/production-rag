@@ -21,11 +21,13 @@ import contextvars
 import functools
 import json
 import logging
+import logging.handlers
 import os
 import sys
 import time
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Callable, Iterator, TextIO
 
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -69,9 +71,19 @@ class _JsonFormatter(logging.Formatter):
 
 
 def configure(
-    level: str | None = None, stream: TextIO | None = None, force: bool = False
+    level: str | None = None,
+    stream: TextIO | None = None,
+    file: str | Path | None = None,
+    force: bool = False,
 ) -> None:
-    """Configure the root handler once. Safe to call repeatedly."""
+    """Configure root handlers once. Safe to call repeatedly.
+
+    Always logs JSON lines to `stream` (stdout default). When `file` is
+    given (or `LOG_FILE` env is set), also appends to that file with
+    rotation (10 MiB x 5), creating parent dirs. One JSON object per
+    line (.jsonl) — filter with e.g. `Select-String request_id` or parse
+    each line with `ConvertFrom-Json`.
+    """
     global _configured
     if _configured and not force:
         return
@@ -79,9 +91,19 @@ def configure(
     if force:
         for handler in list(root.handlers):
             root.removeHandler(handler)
-    handler = logging.StreamHandler(stream or sys.stdout)
-    handler.setFormatter(_JsonFormatter())
-    root.addHandler(handler)
+    formatter = _JsonFormatter()
+    console = logging.StreamHandler(stream or sys.stdout)
+    console.setFormatter(formatter)
+    root.addHandler(console)
+    target = file if file is not None else os.getenv("LOG_FILE")
+    if target:
+        path = Path(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rotating = logging.handlers.RotatingFileHandler(
+            path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
+        rotating.setFormatter(formatter)
+        root.addHandler(rotating)
     root.setLevel((level or os.getenv("LOG_LEVEL") or "INFO").upper())
     _configured = True
 

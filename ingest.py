@@ -13,9 +13,14 @@ import argparse
 import json
 import sys
 
+from production_rag.common import logging as plog
 from production_rag.common.logging import get_logger, new_request_id
 from production_rag.indexing import dispatcher
 from production_rag.indexing.errors import IndexingError
+
+# force: importing the dispatcher already configured the default
+# (console-only) handler; the entry point owns the final config.
+plog.configure(file="logs/pipeline.jsonl", force=True)
 
 PREVIEW_CHARS = 500
 
@@ -29,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--full", action="store_true", help="print full content")
     args = parser.parse_args(argv)
 
+    # Windows consoles default to cp1252; fixtures contain日本語.
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except Exception:
+            pass
     request_id = new_request_id()
     logger.info("manual ingest start", extra={"file_name": args.path})
     try:
