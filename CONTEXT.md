@@ -12,8 +12,10 @@ End-to-end production-grade RAG system, built simply and hardened iteratively sp
 
 ## Phase 1 Scope (Indexing only)
 
-- Ingest documents starting with text files, then one by one: HTML files, PDFs, directories.
-- Normalize each input and wrap it in a Document.
+- Ingest from txt, md, html, pdf files plus http(s) URLs (directories
+  explicitly out of scope).
+- Normalize each input, wrap it in a Document, format to one markdown
+  shape, chunk for retrieval.
 - Document Class is user-designed (see issue #1).
 
 ## Language
@@ -46,11 +48,20 @@ _Avoid_: chunk, embedding, record (no shape decided)
 The cleaning applied so different formats share one Document contract.
 _Avoid_: parsing, chunking, embedding
 
+**Heading path**:
+The breadcrumb of headings above a chunk (e.g. Leave Policy > Casual Leave).
+_Avoid_: section trail, outline
+
+**Table bundle**:
+A table kept atomic together with its explaining paragraph above and footnotes below.
+_Avoid_: table chunk
+
 ## Agreed decisions
 
-- **Metadata groups**: provenance (where/when) + structural/positional + categorization/semantic are in; access control/governance is out of scope. Exact per-stage fields pending.
+- **Metadata groups**: provenance (where/when) + structural/positional + categorization/semantic are in; access control/governance is out of scope. Exact per-stage metadata fields pending.
 - **Document home**: Document lives in indexing until vector-DB ingest.
 - **Execution model**: pre-retrieval work is programmatic flow; LangGraph orchestrates retrieval → synthesis → eval only.
+- **Domain**: company policy handbook (single-tenant; RBAC stays out). Chunking models policy shape: heading paths, atomic tables bundled with above/below context, version/date filtering, repeated header/footer suppression.
 
 ## Undecided (explicitly not assumed)
 
