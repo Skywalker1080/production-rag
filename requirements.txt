@@ -17,6 +17,7 @@ langchain-text-splitters>=0.3
 qdrant-client>=1.12
 pypdf>=5.0
 unstructured[pdf]>=0.27
+fastembed>=0.8
 
 # AWS
 boto3>=1.34

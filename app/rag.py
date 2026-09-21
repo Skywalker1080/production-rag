@@ -172,38 +172,70 @@ def get_vector_store() -> QdrantVectorStore:
         client=get_qdrant_client(),
         collection_name=config.QDRANT_COLLECTION,
         embedding=get_embeddings(),
+        vector_name="dense",
+    )
+
+
+_bm25_model = None
+
+
+def get_bm25():
+    """Local BM25 sparse encoder (no server, no quota). Singleton."""
+    global _bm25_model
+    if _bm25_model is None:
+        from fastembed import SparseTextEmbedding
+
+        _bm25_model = SparseTextEmbedding("Qdrant/bm25")
+    return _bm25_model
+
+
+def _to_sparse(vec) -> "SparseVector":
+    from qdrant_client.http.models import SparseVector
+
+    return SparseVector(
+        indices=[int(i) for i in vec.indices],
+        values=[float(v) for v in vec.values],
     )
 
 
 def ensure_collection() -> None:
-    """Create the Qdrant collection, recreating it if the embedding dim changed.
+    """Create the collection (dense + BM25 sparse), recreating it when the
+    dense dim changed or the layout is legacy (unnamed single vector).
 
-    Switching providers (Titan 1024-dim <-> nomic 768-dim) makes old vectors
-    unreadable, so a mismatch wipes + recreates rather than failing obscurely.
+    Switching providers makes old vectors unreadable, so a mismatch wipes +
+    recreates rather than failing obscurely.
     """
+    from qdrant_client.http.models import SparseVectorParams
+
     log = step_logger("qdrant")
     client = get_qdrant_client()
     need = embedding_dim()
+    ok = False
     if client.collection_exists(config.QDRANT_COLLECTION):
         info = client.get_collection(config.QDRANT_COLLECTION)
         vectors = info.config.params.vectors
-        have = getattr(vectors, "size", None)
-        if have != need:
+        if isinstance(vectors, dict):
+            dense = vectors.get("dense")
+            sparse = info.config.params.sparse_vectors or {}
+            ok = getattr(dense, "size", None) == need and "bm25" in sparse
+        if not ok:
             log.warning(
-                f"dim mismatch (collection={have} vs {config.EMBED_PROVIDER}={need}) "
+                f"collection layout mismatch (need dense={need}+bm25) "
                 "— recreating collection, old vectors dropped"
             )
             client.delete_collection(config.QDRANT_COLLECTION)
-        else:
-            return
-    log.info(
-        f"creating collection {config.QDRANT_COLLECTION} "
-        f"(dim={need}, provider={config.EMBED_PROVIDER})"
-    )
-    client.create_collection(
-        collection_name=config.QDRANT_COLLECTION,
-        vectors_config=VectorParams(size=need, distance=Distance.COSINE),
-    )
+    if not ok:
+        log.info(
+            f"creating collection {config.QDRANT_COLLECTION} "
+            f"(dense dim={need} + bm25 sparse, provider={config.EMBED_PROVIDER})"
+        )
+        client.create_collection(
+            collection_name=config.QDRANT_COLLECTION,
+            vectors_config={
+                "dense": VectorParams(size=need, distance=Distance.COSINE)
+            },
+            sparse_vectors_config={"bm25": SparseVectorParams()},
+        )
 
 
 SKIP_CATEGORIES = {"Header", "Footer", "PageBreak", "Advertisement"}
@@ -437,6 +469,14 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
 
         emit("upsert", f"upserting {total} points to {config.QDRANT_COLLECTION}…")
         client = get_qdrant_client()
+        # BM25 sparse vectors: local, fast, batched (no server, no quota).
+        sparse_vecs = []
+        if config.HYBRID_SEARCH and total:
+            emit("upsert", "encoding BM25 sparse vectors…")
+            bm25 = get_bm25()
+            for s in range(0, total, 256):
+                batch = [c.page_content for c in chunks[s : s + 256]]
+                sparse_vecs.extend(_to_sparse(v) for v in bm25.passage_embed(batch))
         # Qdrant caps request payloads (~32 MB): batch the upsert, critical
         # for wide vectors (2560-dim x 1300 chunks ≈ 43 MB in one shot).
         for s in range(0, total, config.UPSERT_BATCH_SIZE):
@@ -446,7 +486,11 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
                         uuid.NAMESPACE_URL,
                         f"{config.QDRANT_COLLECTION}:{name}:{i}",
                     ).hex,
-                    vector=vectors[i],
+                    vector=(
+                        {"dense": vectors[i], "bm25": sparse_vecs[i]}
+                        if sparse_vecs
+                        else {"dense": vectors[i]}
+                    ),
                     payload={
                         "page_content": chunks[i].page_content,
                         "metadata": chunks[i].metadata,
@@ -594,17 +638,53 @@ def _build_rag_message(context: str, question: str) -> str:
     )
 
 
+def _hybrid_search(question: str, k: int):
+    """Dense (bge-m3) + BM25 sparse retrieval fused with RRF.
+
+    Returns (docs, debug) where debug records each hit's origin ranks.
+    """
+    from langchain_core.documents import Document
+    from qdrant_client.http.models import Fusion, FusionQuery, Prefetch
+
+    client = get_qdrant_client()
+    pre = config.HYBRID_PREFETCH
+    dense_vec = get_embeddings().embed_query(question)
+    sparse_vec = _to_sparse(next(iter(get_bm25().query_embed(question))))
+    res = client.query_points(
+        collection_name=config.QDRANT_COLLECTION,
+        prefetch=[
+            Prefetch(query=dense_vec, using="dense", limit=pre),
+            Prefetch(query=sparse_vec, using="bm25", limit=pre),
+        ],
+        query=FusionQuery(fusion=Fusion.RRF),
+        limit=k,
+        with_payload=True,
+    )
+    docs = [
+        Document(
+            page_content=p.payload.get("page_content", ""),
+            metadata=p.payload.get("metadata", {}),
+        )
+        for p in res.points
+    ]
+    return docs, {"fused": len(docs), "prefetch_each": pre}
+
+
 def query(question: str, top_k: int | None = None):
     """Retrieve + generate. Returns (answer, sources)."""
     k = top_k or config.TOP_K
     log = step_logger("query")
-    log.info(f"start q={question[:120]!r} top_k={k}")
+    log.info(f"start q={question[:120]!r} top_k={k} hybrid={config.HYBRID_SEARCH}")
 
     # Step 1: retrieve similar chunks from Qdrant
     try:
-        store = get_vector_store()
-        docs = store.similarity_search(question, k=k)
-        log.info(f"step=retrieve done hits={len(docs)}")
+        if config.HYBRID_SEARCH:
+            docs, dbg = _hybrid_search(question, k)
+        else:
+            store = get_vector_store()
+            docs = store.similarity_search(question, k=k)
+            dbg = {"fused": len(docs), "prefetch_each": 0}
+        log.info(f"step=retrieve done hits={len(docs)} {dbg}")
     except Exception:
         log.exception("FAILED step=retrieve (embeddings or Qdrant?)")
         raise
