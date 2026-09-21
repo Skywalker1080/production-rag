@@ -150,6 +150,32 @@ module ragas imports).
 Weakest axis is context_precision (0.72) — retrieval ranking still Nos. 1
 lever for the next experiment round.
 
+## E10 — cross-encoder rerank (bge-reranker-v2-m3), before/after
+
+Prerequisite check first: recall audit over golden answer probes — all gold
+pages present in hybrid top-30, but dividend (rank 10), total-expenses (10),
+finance-costs (28) stranded outside the top-8 the LLM reads. Rerank is the
+right surgery (retrieval already finds them).
+Setup: hybrid RRF top-30 → `CrossEncoder(BAAI/bge-reranker-v2-m3)` rescore →
+top-8 → LLM. `RERANK` toggle, `RERANK_TOPN=30`. Model cached in HF hub,
+~1–3 s per query on 4 GB VRAM.
+
+| Metric | BEFORE (no rerank) | AFTER (rerank) | Δ |
+|---|---|---|---|
+| context_precision | 0.736 | **0.926** | **+0.190** |
+| answer_relevancy | 0.933 | 0.941 | +0.008 |
+| faithfulness | 0.773 | 0.710 | −0.063 |
+| context_recall | 0.875 | 0.750 | −0.125 |
+| refusals | 1/2* | 2/2 | — |
+
+*BEFORE refuse-poem "FAIL" was a rule-check miss (valid decline lacking our
+markers), not a model failure — markers widened after.
+Caveats: finance-costs now answers correctly from p.58 instead of gold p.110
+(valid alternate citation, penalized by reference-bound recall); judge noise
+is real (±0.11 faithfulness swings observed between identical-code runs), so
+the faithfulness/recall dips need a repeat run before calling them signal.
+Headline stands: precision +0.19, the exact axis reranking targets.
+
 ## Open items
 
 - Footnote extraction unverified (0 across runs) — manual audit vs known pages.

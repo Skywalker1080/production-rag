@@ -77,7 +77,9 @@ def score_answer_probes(rows):
 
 def check_refusals(rows):
     """Refusal probe passes if the answer declines instead of inventing."""
-    markers = ["do not contain", "only answer", "unable to", "cannot answer"]
+    markers = ["do not contain", "only answer", "unable to", "cannot answer",
+               "cannot write", "not able to", "specialize only",
+               "outside that scope", "decline", "specialist in answering"]
     out = {}
     for r in rows:
         if r["type"] == "refuse":

@@ -670,21 +670,52 @@ def _hybrid_search(question: str, k: int):
     return docs, {"fused": len(docs), "prefetch_each": pre}
 
 
+def _reranker():
+    """bge cross-encoder singleton (GPU if available)."""
+    global _reranker_model
+    try:
+        return _reranker_model
+    except NameError:
+        _reranker_model = None
+    if _reranker_model is None:
+        from sentence_transformers import CrossEncoder
+
+        _reranker_model = CrossEncoder(config.RERANK_MODEL)
+    return _reranker_model
+
+
+def _rerank(question: str, docs: list, k: int, log) -> list:
+    """Cross-encoder rescore of candidate docs, keep top-k."""
+    import time as _time
+
+    t0 = _time.time()
+    model = _reranker()
+    scores = model.predict([(question, d.page_content) for d in docs])
+    ranked = sorted(zip(scores, docs), key=lambda p: float(p[0]), reverse=True)
+    top = [d for _, d in ranked[:k]]
+    best = [(round(float(s), 4), d.metadata.get("page")) for s, d in ranked[:5]]
+    log.info(f"step=rerank done kept={len(top)}/{len(docs)} "
+             f"in {_time.time()-t0:.1f}s top5={best}")
+    return top
 def query(question: str, top_k: int | None = None):
     """Retrieve + generate. Returns (answer, sources)."""
     k = top_k or config.TOP_K
     log = step_logger("query")
-    log.info(f"start q={question[:120]!r} top_k={k} hybrid={config.HYBRID_SEARCH}")
+    log.info(f"start q={question[:120]!r} top_k={k} hybrid={config.HYBRID_SEARCH} "
+             f"rerank={config.RERANK}")
 
     # Step 1: retrieve similar chunks from Qdrant
     try:
+        fetch_k = max(k, config.RERANK_TOPN) if config.RERANK else k
         if config.HYBRID_SEARCH:
-            docs, dbg = _hybrid_search(question, k)
+            docs, dbg = _hybrid_search(question, fetch_k)
         else:
             store = get_vector_store()
-            docs = store.similarity_search(question, k=k)
+            docs = store.similarity_search(question, k=fetch_k)
             dbg = {"fused": len(docs), "prefetch_each": 0}
         log.info(f"step=retrieve done hits={len(docs)} {dbg}")
+        if config.RERANK and len(docs) > k:
+            docs = _rerank(question, docs, k, log)
     except Exception:
         log.exception("FAILED step=retrieve (embeddings or Qdrant?)")
         raise

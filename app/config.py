@@ -41,6 +41,9 @@ EMBED_PACING_SECS = float(os.getenv("EMBED_PACING_SECS", "2"))
 UPSERT_BATCH_SIZE = int(os.getenv("UPSERT_BATCH_SIZE", "200"))
 HYBRID_SEARCH = os.getenv("HYBRID_SEARCH", "true").lower() == "true"
 HYBRID_PREFETCH = int(os.getenv("HYBRID_PREFETCH", "20"))
+RERANK = os.getenv("RERANK", "false").lower() == "true"
+RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+RERANK_TOPN = int(os.getenv("RERANK_TOPN", "30"))
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
