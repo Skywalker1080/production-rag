@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PDF RAG — LangChain + Qdrant + Bedrock GLM 5</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #0f1115; color: #e8e8e8; }
+  header { padding: 16px 24px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  header span { color: #9aa; font-size: 13px; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px; display: grid; gap: 20px; }
+  .card { background: #171a21; border: 1px solid #262b36; border-radius: 12px; padding: 18px; }
+  .card h2 { margin: 0 0 12px; font-size: 15px; color: #cbd5e1; }
+  button { background: #4f7cff; color: white; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-size: 14px; }
+  button:disabled { opacity: .5; cursor: wait; }
+  button.danger { background: #b33636; }
+  input[type=file], input[type=text], textarea { width: 100%; }
+  textarea { background: #0f1115; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 12px; font-size: 15px; resize: vertical; }
+  #answer { white-space: pre-wrap; line-height: 1.6; }
+  .src { border-top: 1px solid #262b36; margin-top: 10px; padding-top: 10px; font-size: 13px; color: #aeb8c6; }
+  .src b { color: #e2e8f0; }
+  #status { font-size: 13px; color: #9aa; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .steps { display: flex; gap: 6px; margin: 12px 0 4px; }
+  .step { flex: 1; text-align: center; font-size: 12px; padding: 8px 4px; border-radius: 8px; background: #0f1115; border: 1px solid #2a2f3a; color: #667; }
+  .step.active { border-color: #4f7cff; color: #cfe0ff; background: #1a2340; }
+  .step.done { border-color: #2f9e5f; color: #9fe0b8; }
+  .step.failed { border-color: #b33636; color: #ff9d9d; }
+  #jobMsg { font-size: 13px; color: #9aa; margin-top: 8px; min-height: 20px; }
+  .bar { height: 6px; background: #0f1115; border-radius: 4px; overflow: hidden; margin-top: 8px; border: 1px solid #2a2f3a; }
+  .bar > div { height: 100%; width: 0%; background: #4f7cff; transition: width .4s; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📄 PDF RAG</h1>
+  <span id="status">checking backend…</span>
+</header>
+<main>
+  <div class="card">
+    <h2>1 · Upload PDF</h2>
+    <div class="row">
+      <input type="file" id="pdf" accept="application/pdf" />
+      <button id="uploadBtn" onclick="upload()">Upload &amp; Ingest</button>
+    </div>
+    <div class="steps" id="steps" style="display:none">
+      <div class="step" data-s="load_pdf">📄 Parsing</div>
+      <div class="step" data-s="split">✂️ Splitting</div>
+      <div class="step" data-s="upsert">🧠 Embedding</div>
+      <div class="step" data-s="done">✅ Done</div>
+    </div>
+    <div class="bar" id="barWrap" style="display:none"><div id="bar"></div></div>
+    <p id="jobMsg"></p>
+  </div>
+
+  <div class="card">
+    <h2>2 · Ask</h2>
+    <textarea id="q" rows="3" placeholder="Ask something about your PDFs…"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="askBtn" onclick="ask()">Ask</button>
+      <button class="danger" onclick="clearDocs()">Clear all documents</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Answer</h2>
+    <div id="answer">No question asked yet.</div>
+    <div id="sources"></div>
+  </div>
+</main>
+
+<script>
+const STEP_ORDER = ['load_pdf', 'split', 'upsert', 'done'];
+let pollTimer = null;
+
+async function refreshStatus() {
+  try {
+    const r = await fetch('/health');
+    const j = await r.json();
+    document.getElementById('status').textContent =
+      `LLM ${j.llm_model} · qdrant ${j.qdrant_ok ? 'ok' : 'DOWN'} · chunks ${j.chunks}`;
+  } catch { document.getElementById('status').textContent = 'backend unreachable'; }
+}
+refreshStatus();
+
+function paintSteps(current, failed) {
+  document.getElementById('steps').style.display = 'flex';
+  document.getElementById('barWrap').style.display = 'block';
+  const idx = STEP_ORDER.indexOf(current);
+  document.querySelectorAll('.step').forEach(el => {
+    const i = STEP_ORDER.indexOf(el.dataset.s);
+    el.classList.remove('active', 'done', 'failed');
+    if (failed && i >= idx) { if (el.dataset.s === current || i > idx) el.classList.add('failed'); }
+    else if (current === 'done' || i < idx) el.classList.add('done');
+    else if (i === idx) el.classList.add('active');
+  });
+  const pct = failed ? 100 : current === 'done' ? 100 : Math.max(5, (idx / STEP_ORDER.length) * 100);
+  const bar = document.getElementById('bar');
+  bar.style.width = pct + '%';
+  bar.style.background = failed ? '#b33636' : (current === 'done' ? '#2f9e5f' : '#4f7cff');
+}
+
+async function pollJob(jobId) {
+  try {
+    const r = await fetch('/api/jobs/' + jobId);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || 'job lookup failed');
+    const msg = document.getElementById('jobMsg');
+    if (j.status === 'completed') {
+      clearInterval(pollTimer); pollTimer = null;
+      paintSteps('done', false);
+      msg.textContent = `✅ ${j.filename} ingested (${j.chunks} chunks)`;
+      document.getElementById('uploadBtn').disabled = false;
+      refreshStatus();
+    } else if (j.status === 'failed') {
+      clearInterval(pollTimer); pollTimer = null;
+      paintSteps(j.step === 'failed' ? 'upsert' : j.step, true);
+      msg.textContent = `❌ ${j.filename}: ${j.error || j.detail} — check logs/rag.log`;
+      document.getElementById('uploadBtn').disabled = false;
+    } else {
+      paintSteps(j.step === 'queued' ? 'load_pdf' : j.step, false);
+      msg.textContent = `⏳ [${j.job_id}] ${j.step}: ${j.detail}`;
+    }
+  } catch (e) {
+    clearInterval(pollTimer); pollTimer = null;
+    document.getElementById('jobMsg').textContent = '❌ polling failed: ' + e.message;
+    document.getElementById('uploadBtn').disabled = false;
+  }
+}
+
+async function upload() {
+  const f = document.getElementById('pdf').files[0];
+  const msg = document.getElementById('jobMsg');
+  if (!f) { msg.textContent = 'Pick a PDF first.'; return; }
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true; msg.textContent = 'Uploading…';
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  const fd = new FormData(); fd.append('file', f);
+  try {
+    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (r.status !== 202) throw new Error(j.detail || 'upload failed');
+    msg.textContent = `⏳ [${j.job_id}] queued…`;
+    paintSteps('load_pdf', false);
+    pollTimer = setInterval(() => pollJob(j.job_id), 1000);
+    pollJob(j.job_id);
+  } catch (e) { msg.textContent = '❌ ' + e.message; btn.disabled = false; }
+}
+
+async function ask() {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const btn = document.getElementById('askBtn');
+  const ans = document.getElementById('answer');
+  const src = document.getElementById('sources');
+  btn.disabled = true; ans.textContent = 'Thinking…'; src.innerHTML = '';
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ question: q })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || 'query failed');
+    ans.textContent = j.answer;
+    src.innerHTML = (j.sources || []).map((s, i) =>
+      `<div class="src"><b>${s.metadata?.source || 'unknown'}</b> (page ${s.metadata?.page ?? '?'})<br/>${((s.content || '').slice(0, 300)).replace(/</g,'&lt;')}</div>`
+    ).join('');
+  } catch (e) { ans.textContent = '❌ ' + e.message; }
+  btn.disabled = false;
+}
+
+async function clearDocs() {
+  if (!confirm('Delete ALL ingested chunks?')) return;
+  await fetch('/api/documents', { method: 'DELETE' });
+  refreshStatus();
+  document.getElementById('answer').textContent = 'No question asked yet.';
+  document.getElementById('sources').innerHTML = '';
+}
+</script>
+</body>
+</html>

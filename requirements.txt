@@ -1,0 +1,22 @@
+# Core
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+python-dotenv>=1.0
+
+# LangChain RAG stack
+langchain>=0.3
+langchain-community>=0.3
+langchain-aws>=0.2
+langchain-google-genai>=4.0
+langchain-ollama>=1.0
+langchain-qdrant>=0.2
+langchain-text-splitters>=0.3
+
+# Vector DB + PDF (unstructured loader handles multi-column layout)
+qdrant-client>=1.12
+pypdf>=5.0
+unstructured[pdf]>=0.27
+
+# AWS
+boto3>=1.34

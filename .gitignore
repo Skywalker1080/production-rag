@@ -1,0 +1,15 @@
+# Secrets / local config
+.env
+
+# Data + runtime artifacts (never commit)
+data/
+logs/
+.venv/
+__pycache__/
+*.pyc
+
+# Frontend deps (rebuild via npm install)
+frontend/node_modules/
+
+# Temp / scratch
+*.log
