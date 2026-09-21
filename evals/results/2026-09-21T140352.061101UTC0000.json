@@ -1,0 +1,72 @@
+{
+ "ts": "2026-09-21T14:03:52.061101+00:00",
+ "config": {
+  "embed_provider": "ollama",
+  "ollama_embed_model": "bge-m3",
+  "hybrid": true,
+  "top_k": 8,
+  "chunk": [
+   1000,
+   200
+  ],
+  "llm": "zai.glm-5"
+ },
+ "scores_mean": {},
+ "refusals": {
+  "refuse-food": true
+ },
+ "probes": [
+  {
+   "id": "rev-consol",
+   "type": "answer",
+   "got_pages": [
+    30,
+    58,
+    81,
+    110,
+    112,
+    124
+   ],
+   "gold_pages": [
+    110
+   ],
+   "answer": "Based on the retrieved excerpts, the consolidated revenue from operations was:\n\n| Fiscal Year | Total Revenue from Operations |\n|-------------|-------------------------------|\n| FY2025 (year ended 31st March, 2025) | ₹2,042.91 crore |\n| FY2026 (year ended 31st March, 2026) | ₹3,513.26 crore |\n\n**Supporting Detail:**\n\nThe consolidated statement shows the breakdown of revenue from operations as follows [jiofin financial report.pdf, p. 110]:\n\n| Component | FY2026 (₹ crore) | FY2025 (₹ crore) |\n|---"
+  },
+  {
+   "id": "refuse-food",
+   "type": "refuse",
+   "got_pages": [
+    15,
+    16,
+    26,
+    33,
+    51,
+    65,
+    141
+   ],
+   "gold_pages": [],
+   "answer": "The retrieved excerpts do not contain this information. The annual report provides details about the MD & CEO Hitesh Sethia's appointment, qualifications, duties, and professional background [jiofin financial report.pdf, pp. 15-16, 33, 51], but does not mention his personal food preferences."
+  }
+ ],
+ "per_probe_scores": [
+  {
+   "user_input": "What was the consolidated revenue from operations for FY2025 and FY2026?",
+   "retrieved_contexts": [
+    "10 )\nPerformance Snapshot (Consolidated)\nTotal Income   Dividend      (₹ crore)  269  3,543  241  217  2,079  1,855  FY 2023-24  FY 2024-25  FY 2025-26\nNet Income From Business Operations  (₹ crore)  1,390  374  227  FY 2023-24  FY 2024-25  FY 2025-26\nPre-Provision Operating\nProfit (PPOP) Excluding Dividend  (₹ crore)  1,353  1,357  1,313  FY 2023-24  FY 2024-25  FY 2025-26\nProfit After Tax   Earnings Per Share (₹)   (₹ crore)   Profit After Tax  2.53  2.54  2.41  1,605  1,613  1,561  FY 2023-24  FY 2024-25  FY 2025-26\nNET WORTH\n₹1,33,854 crore\nFY 2025-26\nTOTAL RETAIL SHAREHOLDERS\nTOTAL EMPLOYEES\n4.79 million  FY 2025-26\n2000+  FY 2025-26\nNBFC Assets Under Management  (₹ crore)  25,711  10,053  173  FY 2023-24  FY 2024-25  FY 2025-26\nAMC Assets Under Management  (₹ crore)  16,712*  0  0  FY 2023-24  FY 2024-25  FY 2025-26\n*Quarterly average AUM for Q4 FY26\nPayments Bank Deposits  (₹ crore)  544  295  88  FY 2023-24  FY 2024-25  FY 2025-26\nPayment Solutions: Total Payment Volume",
+    "Table with columns: eltedlene | Note No. | For the year ended 31°t March, 2026 | For the year ended 31°t March, 2025. Row labels include: Revenue from operations; Interest income; Dividend income; Fees, commission and other services; Net gain on fair value changes; Total revenue from operations; Other income; Total income; Expenses; Finance costs; Impairment on financial instruments; Employee benefits expense; Depreciation and amortisation; Other; expenses. Fiscal years mentioned: FY2025, FY2026\n| eltedlene | Note No. | For the year ended 31°t March, 2026 | For the year ended 31°t March, 2025 |\n|---|---|---|---|\n| Revenue from operations | Revenue from operations | Revenue from operations | Revenue from operations |\n| Interest income | 21 | 1,901.87 | 852.53 |\n| Dividend income | 22 | 268.97 | 240.94 |\n| Fees, commission and other services | 23 | 597.01 | 155.17 |\n| Net gain on fair value changes | 24 | 745.41 | 794.27 |\n| Total revenue from operations |  | 3,513.26 | 2,042.91 |\n| Other income | 25 | 29.35 | 36.01 |\n| Total income |  | 3,542.61 | 2,078.92 |\n| Expenses | Expenses | Expenses | Expenses |\n| Finance costs | 26 | 745.09 | 7.65 |\n| Impairment on financial instruments | 27 | 66.17 | 40.35 |\n| Employee benefits expense | 28 | 387.27 | 214.92 |",
+    "Bio) Finance\n©\nNOTES\nto the Consolidated Financial Statements for the year ended 31st March, 2026\n9.F Other Intangible Assets\nThe total revenue and loss of Jio Payments Bank Limited since June 18, 2025, included in the consolidated statement of profit and loss for the year ended March 31, 2026 is ₹197.85 crore and ₹59.35 crore respectively.\nHad this business combination occurred at the beginning of the annual reporting period, the total revenue and loss before exceptional items of the combined entity for the year ended March 31, 2026 would have been ₹211.19 crore and ₹87.74 crore respectively.\n10 Other non-financial assets\n*Other advances include advances to vendors.\n₹ in crore\nNOTES\nto the Consolidated Financial Statements for the year ended 31st March, 2026\n11 Derivative Financial Instruments",
+    "Table with columns: eIntomee | HOSS INO: | For the year ended 31%t March, 2026 | For the year ended 315t March, 2025. Row labels include: Revenue from operations; Interest income; Dividend income; Fees, commission and other services; Net gain on fair value changes; Total revenue from operations; Other income; Total income; Impairment on financial instruments; Employee benefits expense; Depreciation and amortisation; Other expenses; Total expenses; Profit before tax; Tax expenses. Fiscal years mentioned: FY2025, FY2026\n| eIntomee | HOSS INO: | For the year ended 31%t March, 2026 | For the year ended 315t March, 2025 |\n|---|---|---|---|\n| Revenue from operations | Revenue from operations | Revenue from operations | Revenue from operations |\n| Interest income | 16 | 117.33 | 117.13 |\n| Dividend income | 17 | 405.22 | 235.03 |\n| Fees, commission and other services | 18 | 5.10 | 6.40 |\n| Net gain on fair value changes | 19 | 421.09 | 447.00 |\n| Total revenue from operations |  | 948.74 | 805.56 |\n| Other income | 20 | 19.86 | 33.72 |\n| Total income |  | 968.60 | 839.28 |\n| Impairment on financial instruments | 21 | (5.81) | 6.65 |\n| Employee benefits expense | 22 | 81.35 | 83.41 |\n| Depreciation and amortisation | 23 | 13.16 | 12.36 |\n| Other expenses | 24 | 105.44 | 83.47 |",
+    "Table with columns: eltedlene | Note No. | For the year ended 31°t March, 2026 | For the year ended 31°t March, 2025. Row labels include: Revenue from operations; Interest income; Dividend income; Fees, commission and other services; Net gain on fair value changes; Total revenue from operations; Other income; Total income; Expenses; Finance costs; Impairment on financial instruments; Employee benefits expense; Depreciation and amortisation; Other; expenses. Fiscal years mentioned: FY2025, FY2026\n| eltedlene | Note No. | For the year ended 31°t March, 2026 | For the year ended 31°t March, 2025 |\n|---|---|---|---|\n| Deferred tax | 8 and 17 | 44.77 | 64.40 |\n| Total tax |  | 350.76 | 334.32 |\n| expense |  |  |  |",
+    "_£\n174]\nConsolidated Statement of Cash Flow\nFor the Year Ended 31st March, 2026\nA\nB\nC\nNet cash generated from financing activities (C)\n21,453.70\n₹ in crore\n3,967.69\nParticulars\nFor the year ended\n31st March, 2026\nFor the year ended\n31st March, 2025\nNet increase in Cash and cash equivalents (A+B+C)\n318.46\n285.14\n67.18\n-\n352.32\n₹ in crore\nAs at\n31st March 2025\n342.31\n10.01\n352.32\n₹ in crore\nFor the Year Ended\n31st March, 2025\n-\n3,967.69\n-\n2.31\n3,970.00\n175]",
+    "Consequently, Consolidated Profit After Tax (PAT) for the year stood at ₹1,561 crore against ₹1,613 crore in FY 2024-25.\nThe consolidated financials reflect the diversity of our businesses, with some demonstrating a solid trajectory of growth while others continue to make investments to build the requisite business foundation. Ultimately, this performance reflects our strong capital base, fiscal prudence, optimal capital allocation and leverage and a steadfast focus on unit-level profitability and economics.\nReport on Corporate Governance\nThis report is prepared in accordance with the provisions of the Securities and Exchange Board of India (Listing Obligations and Disclosure Requirements) Regulations, 2015 (“Listing Regulations”) and the report contains the details of Corporate Governance systems and processes at Jio Financial Services Limited (“JFSL”/“the Company”).",
+    "Table with columns: eIntomee | HOSS INO: | For the year ended 31%t March, 2026 | For the year ended 315t March, 2025. Row labels include: Revenue from operations; Interest income; Dividend income; Fees, commission and other services; Net gain on fair value changes; Total revenue from operations; Other income; Total income; Impairment on financial instruments; Employee benefits expense; Depreciation and amortisation; Other expenses; Total expenses; Profit before tax; Tax expenses. Fiscal years mentioned: FY2025, FY2026\n| eIntomee | HOSS INO: | For the year ended 31%t March, 2026 | For the year ended 315t March, 2025 |\n|---|---|---|---|\n| Total expenses |  | 194.14 | 185.89 |\n| Profit before tax |  | 774.46 | 653.39 |\n| Tax expenses |  |  |  |\n| Current tax | 25 | 69.82 | 44.80 |\n| Income tax for earlier years |  | 6.82 |  |\n| Deferred tax | 12 | 16.79 | 59.68 |\n| Total tax |  | 93.43 | 104.48 |\n| expenses |  |  |  |\n| Profit for the year (A) |  | 681.03 | 548.91 |\n| Other comprehensive income (OCI) Items that will not be reclassified to profit or loss: | Other comprehensive income (OCI) Items that will not be reclassified to profit or loss: | Other comprehensive income (OCI) Items that will not be reclassified to profit or loss: | Other comprehensive income (OCI) Items that will not be reclassified to profit or loss: |\n| (i) Remeasurement of the defined benefit plans |  | 0.53 | (0.34) |\n| (ii) Tax relating to above item |  | (0.13) | 0.08 |"
+   ],
+   "response": "Based on the retrieved excerpts, the consolidated revenue from operations was:\n\n| Fiscal Year | Total Revenue from Operations |\n|-------------|-------------------------------|\n| FY2025 (year ended 31st March, 2025) | ₹2,042.91 crore |\n| FY2026 (year ended 31st March, 2026) | ₹3,513.26 crore |\n\n**Supporting Detail:**\n\nThe consolidated statement shows the breakdown of revenue from operations as follows [jiofin financial report.pdf, p. 110]:\n\n| Component | FY2026 (₹ crore) | FY2025 (₹ crore) |\n|-----------|-------------------|------------------|\n| Interest income | 1,901.87 | 852.53 |\n| Dividend income | 268.97 | 240.94 |\n| Fees, commission and other services | 597.01 | 155.17 |\n| Net gain on fair value changes | 745.41 | 794.27 |\n| **Total revenue from operations** | **3,513.26** | **2,042.91** |\n\nAdditionally, the Performance Snapshot on page 30 reports Total Income figures of ₹3,543 crore for FY2025-26 and ₹2,079 crore for FY2024-25, which align closely with the total income figures in the detailed statement (₹3,542.61 crore and ₹2,078.92 crore respectively) [jiofin financial report.pdf, pp. 30, 110].",
+   "reference": "Consolidated revenue from operations was Rs 3,513.26 crore for FY2026 (year ended 31st March 2026) and Rs 2,042.91 crore for FY2025.",
+   "faithfulness": 1.0,
+   "answer_relevancy": 1.0000000000000002,
+   "context_precision": 0.99999999995,
+   "context_recall": 1.0
+  }
+ ]
+}

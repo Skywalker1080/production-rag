@@ -130,6 +130,26 @@ End-to-end answer now returns consolidated FY26 ₹3,513.26 cr / FY25
 ₹2,042.91 cr (p.110) plus standalone figures (p.81), correctly attributed —
 the exact query that failed through E1–E7.
 
+## E9 — RAGAS eval harness + baseline (bge-m3 + hybrid, Atlas prompt)
+
+Setup: `evals/golden.py` (8 answer + 2 refusal probes on JioFin), judge =
+Bedrock GLM 5, judge embeddings = local bge-m3. `uv run python
+evals/run_evals.py [--probes ids]`; results JSON under `evals/results/`
+with auto-delta vs previous run. Notes: ragas pinned `<0.4` (0.4 drops
+LangChain judges); `langchain-community<0.4` (0.4.x removed the vertexai
+module ragas imports).
+
+| Metric | Baseline |
+|---|---|
+| faithfulness | 0.886 |
+| answer_relevancy | 0.907 |
+| context_precision | 0.721 |
+| context_recall | 0.875 |
+| refusals | 2/2 PASS |
+
+Weakest axis is context_precision (0.72) — retrieval ranking still Nos. 1
+lever for the next experiment round.
+
 ## Open items
 
 - Footnote extraction unverified (0 across runs) — manual audit vs known pages.
