@@ -8,13 +8,42 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import config, jobs, rag
+from app import config, jobs, metrics, rag
 from app.logging_setup import setup_logging, step_logger
 
 setup_logging()
 log = step_logger("api")
 
 app = FastAPI(title="Simple PDF RAG (LangChain + Qdrant + Bedrock GLM 5)")
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics():
+    from fastapi.responses import PlainTextResponse
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+    return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.middleware("http")
+async def metrics_middleware(request, call_next):
+    import time
+
+    start = time.perf_counter()
+    try:
+        resp = await call_next(request)
+        status = "ok" if resp.status_code < 400 else "error"
+    except Exception:
+        metrics.REQUESTS.labels(
+            endpoint=request.url.path, status="error").inc()
+        raise
+    elapsed = time.perf_counter() - start
+    if request.url.path.startswith("/api/"):
+        metrics.REQUESTS.labels(
+            endpoint=request.url.path, status=status).inc()
+        metrics.STEP_LATENCY.labels(
+            step="http_" + request.url.path.replace("/api/", "")).observe(elapsed)
+    return resp
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +73,7 @@ def health():
     except Exception:
         log.exception("health check: Qdrant unreachable")
         qdrant_ok = False
+    metrics.QDRANT_UP.set(1 if qdrant_ok else 0)
     return {
         "status": "ok",
         "qdrant_ok": qdrant_ok,

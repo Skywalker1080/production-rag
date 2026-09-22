@@ -505,6 +505,12 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
         raise
 
     emit("done", f"ingested {len(chunks)} chunks")
+    try:
+        from app import metrics as _m
+
+        _m.CHUNKS_INDEXED.inc(len(chunks))
+    except Exception:
+        pass
     return len(chunks)
 
 
@@ -727,6 +733,8 @@ def _rerank(question: str, docs: list, k: int, log) -> list:
     return top
 def query(question: str, top_k: int | None = None):
     """Retrieve + generate. Returns (answer, sources)."""
+    from app import metrics
+
     k = top_k or config.TOP_K
     log = step_logger("query")
     log.info(f"start q={question[:120]!r} top_k={k} hybrid={config.HYBRID_SEARCH} "
@@ -735,15 +743,17 @@ def query(question: str, top_k: int | None = None):
     # Step 1: retrieve similar chunks from Qdrant
     try:
         fetch_k = max(k, config.RERANK_TOPN) if config.RERANK else k
-        if config.HYBRID_SEARCH:
-            docs, dbg = _hybrid_search(question, fetch_k)
-        else:
-            store = get_vector_store()
-            docs = store.similarity_search(question, k=fetch_k)
-            dbg = {"fused": len(docs), "prefetch_each": 0}
+        with metrics.time_step("retrieve"):
+            if config.HYBRID_SEARCH:
+                docs, dbg = _hybrid_search(question, fetch_k)
+            else:
+                store = get_vector_store()
+                docs = store.similarity_search(question, k=fetch_k)
+                dbg = {"fused": len(docs), "prefetch_each": 0}
         log.info(f"step=retrieve done hits={len(docs)} {dbg}")
         if config.RERANK and len(docs) > k:
-            docs = _rerank(question, docs, k, log)
+            with metrics.time_step("rerank"):
+                docs = _rerank(question, docs, k, log)
     except Exception:
         log.exception("FAILED step=retrieve (embeddings or Qdrant?)")
         raise
@@ -761,7 +771,8 @@ def query(question: str, top_k: int | None = None):
             ("system", SYSTEM_PROMPT),
             ("human", _build_rag_message(context, question)),
         ]
-        resp = llm.invoke(messages)
+        with metrics.time_step("generate"):
+            resp = llm.invoke(messages)
         log.info("step=generate done")
     except Exception:
         log.exception(f"FAILED step=generate model={config.BEDROCK_MODEL_ID}")

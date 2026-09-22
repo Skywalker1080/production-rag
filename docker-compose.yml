@@ -9,5 +9,31 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v3.13.2  # already local, no pull needed
+    container_name: rag-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # reach host uvicorn :8000 on Win
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.0.6  # already local, no pull needed
+    container_name: rag-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    restart: unless-stopped
+
 volumes:
   qdrant_data:
+  prometheus_data:
+  grafana_data:
