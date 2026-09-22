@@ -199,6 +199,59 @@ Misses cluster on pages 51/52/90/117/129 + number mismatches on q1/q4/q5/q6
 consolidated tables repeat content), vs (b) truly absent. Precision 0.59
 confirms E9's signal: ranking is still the #1 lever.
 
+## E12 — query rewriting / expansion (deterministic, retrieval-only)
+
+Hypothesis: queries use shorthand (FY26, PAT, ECL) while docs use long
+forms, so appending long forms to the query should lift gold-page ranks.
+Setup: `expand_query()` — FY patterns → "FY2026 year ended 31st March
+2026", abbreviations (PAT→profit after tax, ECL→expected credit loss,
+…) appended, original kept first. 5 miss-cluster probes
+(p1-q5, p2-q2, p2-q3, p2-q4, p2-q9), `_hybrid_search` top-30,
+prefetch 30, valid pages = gold + E11 alternates. No LLM (no $ cost).
+
+| Probe | base rank | +full expansion | +abbrev-only |
+|---|---|---|---|
+| p1-q5 (Chairman) | 1 | 1 | 1 |
+| p2-q2 (dividend) | 1 | 1 | 1 |
+| p2-q3 (PAT) | 1 | **14** | 1 |
+| p2-q4 (net loan) | 4 | 4 | 4 |
+| p2-q9 (ECL stages) | 15 | 14–15 (noise) | 15 |
+
+Verdict: **DROPPED, code reverted.** Full expansion regresses p2-q3
+1→14; everything else ties or noise. Root cause is an interaction with
+our own E6 fix: FY aliases were baked into *every* table caption, so
+appending more FY terms boosts all table chunks equally and drowns the
+discriminative signal ("profit after tax 1,560.90"). Abbrev-only variant
+restores rank 1, proving the FY terms are the poison — but abbrev-only
+is never *better* than baseline, so nothing ships.
+Side finding: p2-q4 ("total net loan at March 31, 2026…") trips the
+bge-m3 NaN overflow on the *base* query too (BM25-only fallback both
+arms) — another instance of the E11 NaN class, not caused by expansion.
+
+## E13 — TOP_K 8 → 12 (end-to-end, 5 probes)
+
+Hypothesis (from HANDOFF §4.2): more context raises faithfulness or
+adds noise. Setup: same 5 miss-cluster probes as E12,
+`rag.query(top_k=12)` vs cached top-8 answers, rerank ON (30→k),
+deterministic number/page checks. No code change (top_k param).
+
+| Probe | top-8 pages | top-8 num | top-12 pages | top-12 num |
+|---|---|---|---|---|
+| p1-q5 | 55,81,83,104,109,110,111,140 | n/a (entity) | +59,60,65,67 | n/a (entity) |
+| p2-q2 | 3,68,70,94,99,110,111,140 | True | +82 | True |
+| p2-q3 | 30,58,70,124,139 | True | +89,137 | True |
+| p2-q4 | 88,95,101,124,132,139 | **False** (quoted 224.07) | +92,**131** | **True** |
+| p2-q9 | 85,87,106,115,118,131,139 | True | +37 | True |
+
+Verdict: **SHIP (default TOP_K 8→12).** p2-q4 fixed — p.131 with the
+correct loan table (25,710.80) makes the cut and the LLM quotes it;
+no probe regressed, no noise observed on these 5. Cost: +50% LLM
+context tokens; rerank cost unchanged (still scores 30). Caveats:
+faithfulness not RAGAS-measured on this subset (judge noise ±0.1);
+side observation — CPU rerank of 30 docs takes 60–185 s/query and
+dominates end-to-end latency, worth a Prometheus look before any
+RERANK_TOPN increase.
+
 ## Open items
 
 - Footnote extraction unverified (0 across runs) — manual audit vs known pages.

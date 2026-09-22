@@ -34,7 +34,7 @@ QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "pdf_docs")
 
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
-TOP_K = int(os.getenv("TOP_K", "8"))
+TOP_K = int(os.getenv("TOP_K", "12"))
 EMBED_WORKERS = int(os.getenv("EMBED_WORKERS", "4"))
 EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "50"))
 EMBED_PACING_SECS = float(os.getenv("EMBED_PACING_SECS", "2"))
