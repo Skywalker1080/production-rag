@@ -1,0 +1,459 @@
+{
+ "ts": "2026-09-22T05:30:45.037084+00:00",
+ "suite": "user-golden-jiofin-20",
+ "config": {
+  "embed_provider": "ollama",
+  "ollama_embed_model": "bge-m3",
+  "hybrid": true,
+  "rerank": true,
+  "top_k": 8,
+  "chunk": [
+   1000,
+   200
+  ],
+  "llm": "zai.glm-5"
+ },
+ "ragas_means": {
+  "faithfulness": 0.9062,
+  "answer_relevancy": 0.7555,
+  "context_precision": 0.5939,
+  "context_recall": 0.8
+ },
+ "deterministic_rates": {
+  "number_match": 0.65,
+  "page_exact": 0.65,
+  "page_pm1": 0.65
+ },
+ "per_probe": [
+  {
+   "id": "p1-q1",
+   "type": "factual_numeric",
+   "difficulty": "easy",
+   "gold_pages": [
+    30
+   ],
+   "got_pages": [
+    21,
+    23,
+    26,
+    30,
+    36,
+    56,
+    105,
+    106
+   ],
+   "section": "Performance Snapshot (Consolidated)",
+   "number_match": false,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "The retrieved excerpts do not contain information about Jio Financial Services' consolidated net worth for FY 2025-26.\n\nThe excerpts do provide some related financial metrics for FY 2025-26, including:\n- Payments Bank Deposits (Quarterly average AUM for Q4 FY26): ₹544 crore [jiofin financial report.pdf, p. 30]\n- Payment Solutions Total Payment Volume: ₹52,226 crore [jiofin financial report.pdf, p."
+  },
+  {
+   "id": "p1-q2",
+   "type": "factual_numeric",
+   "difficulty": "easy",
+   "gold_pages": [
+    3
+   ],
+   "got_pages": [
+    3,
+    68,
+    94,
+    99,
+    110,
+    111,
+    140
+   ],
+   "section": "Notice of AGM — Item 2 (Ordinary Business)",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "The Board of Directors recommended a final dividend of ₹0.60 per equity share for the financial year ended March 31, 2026 [jiofin financial report.pdf, p. 3; p. 140; p. 99].\n\nThis dividend is stated as ₹0.60/- (Sixty paise only) per equity share of ₹10/- each fully paid-up, subject to approval of the members in the forthcoming Annual General Meeting [jiofin financial report.pdf, p. 3; p. 140]."
+  },
+  {
+   "id": "p1-q3",
+   "type": "entity_list",
+   "difficulty": "medium",
+   "gold_pages": [
+    69
+   ],
+   "got_pages": [
+    28,
+    56,
+    66,
+    69,
+    75,
+    77,
+    98,
+    106
+   ],
+   "section": "Auditor's confirmation / Board's Report",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "The Joint Statutory Auditors of Jio Financial Services Limited are M/s Lodha & Co LLP, Chartered Accountants (ICAI Firm Registration No. 301051E/ E300284) [jiofin financial report.pdf, p. 69]."
+  },
+  {
+   "id": "p1-q4",
+   "type": "factual_numeric_multi_part",
+   "difficulty": "medium",
+   "gold_pages": [
+    47
+   ],
+   "got_pages": [
+    21,
+    47,
+    72,
+    74,
+    93,
+    129,
+    139
+   ],
+   "section": "Corporate overview — Impact in FY 2025-26",
+   "number_match": false,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Based on the retrieved excerpts, here is the information on CSR spending and reach for FY 2025-26:\n\n**CSR Spend:**\n- **Standalone:** The Company spent ₹4.61 crore on CSR initiatives during FY 2025-26 [jiofin financial report.pdf, p. 72]. This amount is also confirmed as ₹4,61,00,000 in the Annual Report on CSR activities [jiofin financial report.pdf, p. 74].\n- **Consolidated (Group):** The amount "
+  },
+  {
+   "id": "p1-q5",
+   "type": "entity",
+   "difficulty": "easy",
+   "gold_pages": [
+    51
+   ],
+   "got_pages": [
+    55,
+    81,
+    83,
+    104,
+    109,
+    110,
+    111,
+    140
+   ],
+   "section": "Board of Directors — profiles",
+   "number_match": false,
+   "page_exact": false,
+   "page_pm1": false,
+   "answer": "The Non-Executive Chairman of the company's Board of Directors is K. V. Kamath [jiofin financial report.pdf, p. 55].\n\nThis is confirmed across multiple signature pages in the report, which identify him as \"Non-Executive Chairman DIN: 00043501\" [jiofin financial report.pdf, pp. 83, 104, 109, 111]."
+  },
+  {
+   "id": "p1-q6",
+   "type": "entity",
+   "difficulty": "easy",
+   "gold_pages": [
+    52
+   ],
+   "got_pages": [
+    32,
+    33,
+    54,
+    60,
+    134
+   ],
+   "section": "Key Managerial Personnel",
+   "number_match": false,
+   "page_exact": false,
+   "page_pm1": false,
+   "answer": "Hitesh Sethia is the Managing Director & Chief Executive Officer of Jio Financial Services Limited [jiofin financial report.pdf, p. 33]. This is also confirmed in the related party disclosures, which list \"Hitesh Sethia (Managing Director and Chief Executive Officer)\" as Key Managerial Personnel [jiofin financial report.pdf, p. 134], and in the director profile section [jiofin financial report.pdf"
+  },
+  {
+   "id": "p1-q7",
+   "type": "comparative_numeric",
+   "difficulty": "medium",
+   "gold_pages": [
+    109
+   ],
+   "got_pages": [
+    89,
+    95,
+    109,
+    121,
+    123,
+    132
+   ],
+   "section": "Consolidated Balance Sheet",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Based on the retrieved excerpts, the consolidated Total Assets were:\n\n**As at 31st March, 2026:** ₹1,63,497.08 crore\n**As at 31st March, 2025:** ₹1,33,509.94 crore\n\nThis represents an increase of ₹29,987.14 crore from FY2025 to FY2026.\n\n**Supporting detail:**\nThe Consolidated Balance Sheet shows Total Assets of ₹1,63,497.08 crore as at 31st March, 2026 compared to ₹1,33,509.94 crore as at 31st Mar"
+  },
+  {
+   "id": "p1-q8",
+   "type": "event_reasoning",
+   "difficulty": "hard",
+   "gold_pages": [
+    123
+   ],
+   "got_pages": [
+    31,
+    71,
+    89,
+    121,
+    123
+   ],
+   "section": "Notes to Consolidated Financial Statements — business combinations",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Jio Payments Bank Limited (JPBL) became a wholly owned subsidiary through the acquisition of the remaining 14.96% equity stake from the State Bank of India.\n\n**How it happened:**\n- JFSL acquired 7,90,80,000 equity shares from State Bank of India, representing 14.96% of JPBL's paid-up equity share capital [jiofin financial report.pdf, p. 71].\n- The acquisition was for a total cash consideration of "
+  },
+  {
+   "id": "p1-q9",
+   "type": "contextual_fact",
+   "difficulty": "medium",
+   "gold_pages": [
+    56
+   ],
+   "got_pages": [
+    56,
+    57,
+    82,
+    111,
+    119,
+    139
+   ],
+   "section": "Macroeconomic overview / risk report",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "India received a sovereign credit rating upgrade to 'BBB' by S&P Global Ratings — described as the first such upgrade in over 18 years [jiofin financial report.pdf, p. 56]. This upgrade lowered international borrowing costs for corporates [jiofin financial report.pdf, p. 56]."
+  },
+  {
+   "id": "p1-q10",
+   "type": "negative_unanswerable",
+   "difficulty": "hard",
+   "gold_pages": [
+    null
+   ],
+   "got_pages": [
+    8,
+    23,
+    33,
+    89,
+    98,
+    102,
+    139
+   ],
+   "section": "N/A — deliberately unanswerable",
+   "number_match": false,
+   "page_exact": false,
+   "page_pm1": false,
+   "answer": "The retrieved excerpts do not contain this information.\n\nThe excerpts only provide dividend information for FY 2025-26, where the Board recommended a dividend of ₹0.60 per equity share [jiofin financial report.pdf, p. 33]. No dividend data for FY 2021-22 is available in the provided context."
+  },
+  {
+   "id": "p2-q1",
+   "type": "factual_numeric",
+   "difficulty": "easy",
+   "gold_pages": [
+    30
+   ],
+   "got_pages": [
+    23,
+    30,
+    36,
+    37,
+    58,
+    121,
+    124,
+    139
+   ],
+   "section": "Performance Snapshot (Consolidated)",
+   "number_match": false,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "The retrieved excerpts do not contain the specific figure for Jio Financial Services' consolidated net worth for FY 2025-26.\n\n**What the excerpts do provide:**\n\n- **Consolidated Profit After Tax (PAT):** ₹1,561 crore for FY 2025-26, compared to ₹1,613 crore in FY 2024-25 [jiofin financial report.pdf, p. 58].\n\n- **Consolidated Total Assets:** ₹1,33,088.67 crore as at March 31, 2026 [jiofin financia"
+  },
+  {
+   "id": "p2-q2",
+   "type": "factual_numeric",
+   "difficulty": "easy",
+   "gold_pages": [
+    90
+   ],
+   "got_pages": [
+    3,
+    68,
+    70,
+    94,
+    99,
+    110,
+    111,
+    140
+   ],
+   "section": "Results of Operations and the State of Company's Affairs — Dividend",
+   "number_match": true,
+   "page_exact": false,
+   "page_pm1": false,
+   "answer": "The Board of Directors recommended a dividend of **₹0.60/- (Sixty paise only) per equity share** of ₹10/- each for the financial year ended March 31, 2026 [jiofin financial report.pdf, p. 3].\n\nThis recommendation is also confirmed in the notes to the financial statements, which state that the Board recommended a final dividend of ₹0.60 per equity share for the financial year 2025-26, subject to ap"
+  },
+  {
+   "id": "p2-q3",
+   "type": "factual_numeric",
+   "difficulty": "easy",
+   "gold_pages": [
+    90
+   ],
+   "got_pages": [
+    30,
+    58,
+    70,
+    124,
+    139
+   ],
+   "section": "Results of Operations and the State of Company's Affairs — Consolidated",
+   "number_match": true,
+   "page_exact": false,
+   "page_pm1": false,
+   "answer": "Jio Financial Services' consolidated Profit After Tax (PAT) was **₹1,560.90 crore** for FY 2025-26 and **₹1,612.59 crore** for FY 2024-25 [jiofin financial report.pdf, p. 70].\n\nThis represents a decrease of approximately ₹51.69 crore year-over-year. The report also summarizes these figures as ₹1,561 crore for FY 2025-26 against ₹1,613 crore in FY 2024-25 [jiofin financial report.pdf, p. 58]."
+  },
+  {
+   "id": "p2-q4",
+   "type": "factual_numeric",
+   "difficulty": "medium",
+   "gold_pages": [
+    117
+   ],
+   "got_pages": [
+    88,
+    95,
+    101,
+    124,
+    132,
+    139
+   ],
+   "section": "Note 4 — Loans",
+   "number_match": false,
+   "page_exact": false,
+   "page_pm1": false,
+   "answer": "Based on the retrieved excerpts, Jio Financial Services' total net loan was:\n\n- **₹224.07 crore** as at March 31, 2026\n- **₹1,747.98 crore** as at March 31, 2025\n\nThese figures are stated in the loans disclosure table, which shows total gross loans of ₹225.00 crore (FY2026) and ₹1,755.00 crore (FY2025), less impairment loss allowance of ₹0.93 crore and ₹7.02 crore respectively [jiofin financial re"
+  },
+  {
+   "id": "p2-q5",
+   "type": "multi_attribute",
+   "difficulty": "medium",
+   "gold_pages": [
+    38
+   ],
+   "got_pages": [
+    30,
+    33,
+    38,
+    56,
+    57
+   ],
+   "section": "Jio Payments Bank Limited — Key Highlights",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Based on the retrieved excerpts, Jio Payments Bank's metrics for FY 2025-26 are as follows:\n\n- **Customer base:** 3.7 million CASA customers [jiofin financial report.pdf, p. 57; p. 38]\n- **Total deposits:** ₹544 crore [jiofin financial report.pdf, p. 57; p. 30; p. 33]\n- **Business Correspondent network:** 378,568 BC outlets (including owned and corporate BCs) [jiofin financial report.pdf, p. 57; p"
+  },
+  {
+   "id": "p2-q6",
+   "type": "conceptual_business",
+   "difficulty": "medium",
+   "gold_pages": [
+    39
+   ],
+   "got_pages": [
+    26,
+    32,
+    37,
+    38,
+    39,
+    56,
+    57
+   ],
+   "section": "Jio Payment Solutions Limited — Intelligence At Work",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Based on the retrieved excerpts, Jio Payment Solutions Limited (JPSL) used AI in the following ways during FY 2025-26:\n\n**1. AI-Powered Command Centre**\nJPSL operates a 24x7 AI-Powered Command Centre that serves as the \"central intelligence layer.\" This system enables a lean team to manage large-scale systems with minimal human intervention [jiofin financial report.pdf, p. 39].\n\n**2. Developer Doc"
+  },
+  {
+   "id": "p2-q7",
+   "type": "multi_attribute",
+   "difficulty": "medium",
+   "gold_pages": [
+    40
+   ],
+   "got_pages": [
+    30,
+    33,
+    40,
+    57
+   ],
+   "section": "Jio Insurance Broking Limited — Key Highlights",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Based on the retrieved excerpts, here are the details for Jio Insurance Broking in FY 2025-26:\n\n**Premium Facilitated:**\n- ₹982 crore in total premium collection facilitated [jiofin financial report.pdf, p. 33; p. 40].\n\n**Assets/Lives Covered:**\n- 1.81 million assets/lives covered across life, general and health insurance [jiofin financial report.pdf, p. 40].\n\n**Insurers Partnered for Direct-to-Cu"
+  },
+  {
+   "id": "p2-q8",
+   "type": "factual_numeric",
+   "difficulty": "medium",
+   "gold_pages": [
+    41
+   ],
+   "got_pages": [
+    17,
+    20,
+    31,
+    37,
+    41,
+    47,
+    57
+   ],
+   "section": "Jio BlackRock Asset Management Private Limited — Key Highlights",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Based on the retrieved excerpts, here are the details for Jio BlackRock Asset Management in FY 2025-26:\n\n**Assets Under Management (AUM):**\n- **Quarterly average AUM for Q4 FY 2025-26:** ₹16,712 crore [jiofin financial report.pdf, p. 57] [jiofin financial report.pdf, p. 41]\n- **AUM as on March 31, 2026:** ₹15,218.06 crore [jiofin financial report.pdf, p. 20] [jiofin financial report.pdf, p. 17]\n\n*"
+  },
+  {
+   "id": "p2-q9",
+   "type": "conceptual_financial_accounting",
+   "difficulty": "hard",
+   "gold_pages": [
+    129
+   ],
+   "got_pages": [
+    85,
+    87,
+    106,
+    115,
+    118,
+    131,
+    139
+   ],
+   "section": "Risk Management — Classification of Financial Assets Under Various Stages",
+   "number_match": true,
+   "page_exact": false,
+   "page_pm1": false,
+   "answer": "Based on the retrieved excerpts, Jio Financial Services classifies financial assets under three stages within its Expected Credit Loss (ECL) framework:\n\n**Stage 1**\n- Financial assets where no significant increase in credit risk has been observed since initial recognition [jiofin financial report.pdf, p. 131]\n- A 12-month Expected Credit Loss (ECL) is recognized for these assets [jiofin financial "
+  },
+  {
+   "id": "p2-q10",
+   "type": "regulatory_governance",
+   "difficulty": "hard",
+   "gold_pages": [
+    16
+   ],
+   "got_pages": [
+    16,
+    17,
+    18,
+    19,
+    20,
+    22
+   ],
+   "section": "Item Nos. 6 and 7 — Transactions with Jio BlackRock Mutual Fund",
+   "number_match": true,
+   "page_exact": true,
+   "page_pm1": true,
+   "answer": "Based on the retrieved excerpts, transactions with Jio BlackRock Mutual Fund (JB MF) exceeding **10% of annual consolidated turnover** as on the last audited financial statement of Jio Financial Services Limited require approval of the members of the Company [jiofin financial report.pdf, p. 16].\n\nFor context, the annual consolidated turnover of the Company as on March 31, 2026 is ₹3,513.26 crore ["
+  }
+ ]
+}

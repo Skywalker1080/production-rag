@@ -423,7 +423,7 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
             reraise=True,
         )
         def _embed_one(text: str):
-            return embedding.embed_query(text)
+            return _finite(embedding.embed_query(text), "chunk")
 
         if config.EMBED_PROVIDER in ("gemini", "cohere"):
             # Batched providers (1 request / N texts). Slow + steady:
@@ -448,6 +448,7 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
 
             for s in range(0, total, batch):
                 vecs = _batch_fn([c.page_content for c in chunks[s : s + batch]])
+                vecs = [_finite(v, f"batch@{s}") for v in vecs]
                 vectors[s : s + len(vecs)] = vecs
                 done += len(vecs)
                 emit("upsert", f"embedded {done}/{total}…")
@@ -648,18 +649,30 @@ def _hybrid_search(question: str, k: int):
 
     client = get_qdrant_client()
     pre = config.HYBRID_PREFETCH
-    dense_vec = get_embeddings().embed_query(question)
+    try:
+        dense_vec = _finite(get_embeddings().embed_query(question), "query")
+    except Exception:
+        # bge-m3 can emit NaN for specific token combos (fp16 overflow);
+        # Ollama then 500s. Fall back to BM25-only rather than dying.
+        step_logger("query").warning("dense embed failed, BM25-only fallback")
+        dense_vec = None
     sparse_vec = _to_sparse(next(iter(get_bm25().query_embed(question))))
-    res = client.query_points(
-        collection_name=config.QDRANT_COLLECTION,
-        prefetch=[
-            Prefetch(query=dense_vec, using="dense", limit=pre),
-            Prefetch(query=sparse_vec, using="bm25", limit=pre),
-        ],
-        query=FusionQuery(fusion=Fusion.RRF),
-        limit=k,
-        with_payload=True,
-    )
+    if dense_vec is None:
+        res = client.query_points(
+            collection_name=config.QDRANT_COLLECTION,
+            query=sparse_vec, using="bm25", limit=k, with_payload=True,
+        )
+    else:
+        res = client.query_points(
+            collection_name=config.QDRANT_COLLECTION,
+            prefetch=[
+                Prefetch(query=dense_vec, using="dense", limit=pre),
+                Prefetch(query=sparse_vec, using="bm25", limit=pre),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
+            limit=k,
+            with_payload=True,
+        )
     docs = [
         Document(
             page_content=p.payload.get("page_content", ""),
@@ -668,6 +681,21 @@ def _hybrid_search(question: str, k: int):
         for p in res.points
     ]
     return docs, {"fused": len(docs), "prefetch_each": pre}
+
+
+def _finite(vec: list, where: str) -> list:
+    """bge-m3 rarely emits NaN/Inf for certain inputs (Ollama 500s on them).
+    Zero those dims and log — a slightly degraded vector beats a dead query.
+    """
+    import math
+
+    bad = [i for i, x in enumerate(vec)
+           if isinstance(x, float) and (math.isnan(x) or math.isinf(x))]
+    if bad:
+        step_logger("embed").warning(
+            f"non-finite dims in {where}: {len(bad)}/{len(vec)} — zeroed")
+        vec = [0.0 if i in set(bad) else x for i, x in enumerate(vec)]
+    return vec
 
 
 def _reranker():

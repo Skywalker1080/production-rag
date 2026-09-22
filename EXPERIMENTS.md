@@ -176,6 +176,29 @@ is real (±0.11 faithfulness swings observed between identical-code runs), so
 the faithfulness/recall dips need a repeat run before calling them signal.
 Headline stands: precision +0.19, the exact axis reranking targets.
 
+## E11 — user golden set (20 probes, GLM judge + deterministic checks)
+
+Setup: `evals/run_user_eval.py` over `data/Eval Set` (2×10, manually verified
+answers, physical-page citations). Per-probe disk cache
+(`results/.cache_user_golden.json`, config-fingerprinted) after crashes forced
+two full reruns. Guards added along the way: bge-m3 emits NaN for specific
+token combos (Ollama 500s) → BM25-only retrieval fallback; `p1-q10` has no
+`pdf_page` (unanswerable probe) → page checks tolerate missing gold.
+
+| Metric | User set (20) |
+|---|---|
+| faithfulness | 0.906 |
+| answer_relevancy | 0.756 |
+| context_precision | 0.594 |
+| context_recall | 0.800 |
+| number_match | 0.65 (13/20) |
+| page_exact / page±1 | 0.65 / 0.65 |
+
+Misses cluster on pages 51/52/90/117/129 + number mismatches on q1/q4/q5/q6
+— open triage: (a) right answer, neighboring duplicate page (standalone vs
+consolidated tables repeat content), vs (b) truly absent. Precision 0.59
+confirms E9's signal: ranking is still the #1 lever.
+
 ## Open items
 
 - Footnote extraction unverified (0 across runs) — manual audit vs known pages.
