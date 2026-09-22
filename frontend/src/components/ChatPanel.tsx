@@ -1,10 +1,34 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { askQuestion } from '../api/client';
 import type { Message, Source } from '../types';
 
 const suggestedQuestions = ['What are the main findings?', 'Summarize the documents', 'Compare the key figures'];
+
+function citationMarkdown(content: string, sources: Source[] = []) {
+  return content.replace(/\[([^\]\n]+?),\s*p(?:age)?\.?\s*(\d+)\]/gi, (match, name: string, page: string) => {
+    const normalizedName = name.trim().toLowerCase();
+    const sourceIndex = sources.findIndex((source) => {
+      const sourceName = String(source.metadata?.source ?? '').trim().toLowerCase();
+      return Number(source.metadata?.page) === Number(page) && (sourceName === normalizedName || sourceName.includes(normalizedName) || normalizedName.includes(sourceName));
+    });
+    return sourceIndex === -1 ? match : `[${match}](#citation-${sourceIndex})`;
+  });
+}
+
+function CitationPill({ href, children, ...props }: Readonly<ComponentPropsWithoutRef<'a'> & { source?: Source }>) {
+  const [isOpen, setIsOpen] = useState(false);
+  const source = props.source;
+  if (!href?.startsWith('#citation-') || !source) return <a href={href} {...props}>{children}</a>;
+  const citationText = String(children);
+  const pageLabel = citationText.match(/p(?:age)?\.?\s*(\d+)/i)?.[0] ?? 'Source';
+
+  return <span className="inline-citation" onMouseEnter={() => setIsOpen(true)} onMouseLeave={() => setIsOpen(false)}>
+    <button type="button" className="citation-pill" aria-label={`View citation: ${citationText}`} aria-expanded={isOpen} onFocus={() => setIsOpen(true)} onBlur={() => setIsOpen(false)} onClick={() => setIsOpen((open) => !open)}>{pageLabel}</button>
+    {isOpen && <span role="tooltip" className="citation-tooltip"><span className="citation-tooltip-label">{source.metadata?.source ?? 'Source'} · {pageLabel}</span>{source.content.slice(0, 350)}{source.content.length > 350 && '…'}</span>}
+  </span>;
+}
 
 function Citation({ source, index }: Readonly<{ source: Source; index: number }>) {
   const [expanded, setExpanded] = useState(false);
@@ -24,11 +48,13 @@ function Citation({ source, index }: Readonly<{ source: Source; index: number }>
 
 function MessageItem({ message }: Readonly<{ message: Message }>) {
   const isUser = message.role === 'user';
+  const markdown = citationMarkdown(message.content, message.sources);
+  const citationSources = message.sources ?? [];
   return <article className={`message-row ${isUser ? 'message-user' : 'message-assistant'}`}>
     {!isUser && <div className="message-avatar">AI</div>}
     <div className={`message-content ${isUser ? 'user-content' : 'assistant-content'}`}>
       <p className="message-label">{isUser ? 'You' : 'Atlas'}</p>
-      {message.isLoading ? <div className="loading-line"><span /><span /><span /></div> : isUser ? <p className="whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{message.content}</p> : <div className="markdown-output"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>}
+      {message.isLoading ? <div className="loading-line"><span /><span /><span /></div> : isUser ? <p className="whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{message.content}</p> : <div className="markdown-output"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ href, children, ...props }) => { const index = Number(href?.replace('#citation-', '')); return <CitationPill href={href} source={Number.isInteger(index) ? citationSources[index] : undefined} {...props}>{children}</CitationPill>; } }}>{markdown}</ReactMarkdown></div>}
       {!isUser && message.sources && message.sources.length > 0 && <section className="sources"><p className="sources-title">Grounding sources</p>{message.sources.map((source, index) => <Citation key={`${source.metadata?.source ?? 'source'}-${index}`} source={source} index={index} />)}</section>}
     </div>
   </article>;
