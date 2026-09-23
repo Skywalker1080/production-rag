@@ -18,6 +18,16 @@ Upload a company's annual report (100+ pages) and ask questions in plain English
            and answers with [file, page] citations
 ```
 
+```mermaid
+flowchart LR
+    PDF[("Annual Report PDF")] --> READ["Read once, carefully<br/>(cloud computer)"]
+    READ --> DB[("Searchable memory<br/>(1,312 chunks)")]
+    DB --> FIND["Find the right pages"]
+    FIND --> CHECK["Double-check top pages"]
+    CHECK --> ANSWER["Answer with<br/>page citations"]
+    Q["Your question"] --> FIND
+```
+
 Big reports are read on a powerful cloud computer (once per document), everything else runs on your own machine — so answering questions is fast and costs almost nothing.
 
 ## Why it's good
@@ -38,7 +48,22 @@ Big reports are read on a powerful cloud computer (once per document), everythin
 | Numbers exactly right | 13 / 20 |
 | Trick questions correctly refused | 2 / 2 |
 
- Known weak spot: exact-number questions (13/20) — tables with near-identical figures across years. The full experiment diary (13 experiments: what we tried, what failed, why) is in [`EXPERIMENTS.md`](EXPERIMENTS.md).
+ Known weak spot: exact-number questions (13/20) — tables with near-identical figures across years.
+
+### What we tried (13 experiments so far)
+
+| # | What we tried | What happened | Verdict |
+|---|---|---|---|
+| 1–3 | Cheap vs careful PDF reading | Cheap reading found **0 tables**; careful reading found 277 (takes ~11 min, once per file) | ✅ Careful reading |
+| 4 | Smarter chunking | Stopped 83% of chunks being useless fragments | ✅ Shipped |
+| 5–7 | Which search engine understands finance best | Winner (bge-m3) put the right page at rank 7/2/1 vs 25+ for the runner-up | ✅ Shipped |
+| 8 | Combine meaning-search + keyword-search | Key revenue page jumped from rank 7 → **1** | ✅ Shipped |
+| 9–10 | Add a double-check step (reranker) | Correct-page rate +0.19 (0.736 → **0.926**) | ✅ Shipped |
+| 11 | Test on 20 hand-verified questions | Found 4 test-sheet page numbers were wrong, not the search — fixed the test, pages 0.65 → **0.90** | ✅ Fixed |
+| 12 | Auto-expand shorthand (FY26, PAT…) in questions | Made one answer **worse** (rank 1 → 14) — extra year-words confused every table equally | ❌ Dropped |
+| 13 | Show the answer-writer 12 pages instead of 8 | Fixed a wrong loan figure (₹224 → ₹25,710 cr), nothing got worse | ✅ Shipped |
+
+The full diary with all numbers is in [`EXPERIMENTS.md`](EXPERIMENTS.md).
 
 ## Tech stack
 
