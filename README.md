@@ -37,6 +37,13 @@ Big reports are read on a powerful cloud computer (once per document), everythin
 - **Says "I don't know."** If the report doesn't contain the answer, it says so instead of guessing.
 - **Tested, not vibes.** 30 test questions with verified answers. Scores published below — every improvement had to beat them first.
 
+## Built for production, not just a demo
+
+- **Survives cloud hiccups.** Every call to paid APIs retries automatically with exponential backoff (up to 6 attempts) — but *only* for rate-limits. Real errors (wrong key, unknown model) fail fast and loud instead of being hidden by retries.
+- **Switch providers with one setting.** Embeddings run locally by default (free, unlimited), but one `.env` line switches to AWS Titan, Google Gemini, or Cohere. The database rebuilds itself automatically when dimensions differ, and quota-friendly batching + pacing keeps cloud bills and throttling under control.
+- **Graded like software, not vibes.** Two test suites (10 + 20 verified questions) run on every change: an LLM judge scores faithfulness/relevance, and strict checks verify exact numbers and page citations. Results are cached, resumable, and diffed against the previous run.
+- **Cloud-friendly by design.** Stateless API in Docker, background uploads with progress polling, health + metrics endpoints, one-command observability (Prometheus + Grafana), and heavy PDF reading offloaded to disposable cloud machines that shut down when idle.
+
 ## Proof it works
 
 30 test questions against a real 143-page financial report:
