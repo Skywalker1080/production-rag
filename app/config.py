@@ -44,6 +44,9 @@ HYBRID_PREFETCH = int(os.getenv("HYBRID_PREFETCH", "20"))
 RERANK = os.getenv("RERANK", "false").lower() == "true"
 RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 RERANK_TOPN = int(os.getenv("RERANK_TOPN", "30"))
+# "auto" (cuda if available) | "cuda" | "cpu"
+RERANK_DEVICE = os.getenv("RERANK_DEVICE", "auto").lower()
+RERANK_BATCH_SIZE = int(os.getenv("RERANK_BATCH_SIZE", "16"))
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 

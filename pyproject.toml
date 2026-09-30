@@ -20,6 +20,16 @@ dependencies = [
     "qdrant-client>=1.12",
     "ragas>=0.3,<0.4",
     "sentence-transformers>=6.1.0",
+    "torch>=2.2",
     "unstructured[pdf]>=0.27.6",
     "uvicorn[standard]>=0.30",
 ]
+
+# GPU reranker: pull torch from the PyTorch CUDA wheel index (not PyPI's CPU build).
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

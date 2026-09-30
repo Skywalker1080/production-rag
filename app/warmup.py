@@ -79,11 +79,23 @@ def check_bedrock() -> None:
     )
 
 
+def warm_reranker() -> None:
+    from app import rag
+
+    if not config.RERANK:
+        log.info("rerank disabled (RERANK=false) — skipping")
+        return
+    log.info(f"warming reranker ({config.RERANK_MODEL})…")
+    rag.warm_reranker()
+    log.info("reranker ready")
+
+
 def main() -> None:
     log.info("warmup start")
     warm_layout_model()
     warm_table_model()
     warm_partition_path()
+    warm_reranker()
     check_bedrock()
     log.info("warmup done — uploads will no longer wait on model downloads")
 

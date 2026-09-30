@@ -704,33 +704,68 @@ def _finite(vec: list, where: str) -> list:
     return vec
 
 
+_reranker_model = None
+_reranker_device: str | None = None
+
+
+def _resolve_rerank_device() -> str:
+    """Resolve the rerank device: auto -> cuda if available, else cpu."""
+    import torch
+
+    choice = config.RERANK_DEVICE
+    if choice == "cpu":
+        return "cpu"
+    if choice == "cuda":
+        return "cuda"
+    # auto
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 def _reranker():
     """bge cross-encoder singleton (GPU if available)."""
-    global _reranker_model
-    try:
-        return _reranker_model
-    except NameError:
-        _reranker_model = None
+    global _reranker_model, _reranker_device
     if _reranker_model is None:
         from sentence_transformers import CrossEncoder
 
-        _reranker_model = CrossEncoder(config.RERANK_MODEL)
+        _reranker_device = _resolve_rerank_device()
+        log = step_logger("rerank")
+        log.info(f"loading reranker {config.RERANK_MODEL} on {_reranker_device}")
+        _reranker_model = CrossEncoder(config.RERANK_MODEL, device=_reranker_device)
+        log.info(f"reranker loaded on {_reranker_device}")
     return _reranker_model
+
+
+def warm_reranker() -> None:
+    """Load the reranker + a dummy predict so the first query doesn't pay it."""
+    import torch
+
+    model = _reranker()
+    with torch.inference_mode():
+        model.predict([("warmup", "text")])
+    log = step_logger("warmup")
+    log.info(f"reranker warm on {_reranker_device}")
 
 
 def _rerank(question: str, docs: list, k: int, log) -> list:
     """Cross-encoder rescore of candidate docs, keep top-k."""
     import time as _time
+    import torch
 
     t0 = _time.time()
     model = _reranker()
-    scores = model.predict([(question, d.page_content) for d in docs])
+    with torch.inference_mode():
+        scores = model.predict(
+            [(question, d.page_content) for d in docs],
+            batch_size=config.RERANK_BATCH_SIZE,
+        )
     ranked = sorted(zip(scores, docs), key=lambda p: float(p[0]), reverse=True)
     top = [d for _, d in ranked[:k]]
     best = [(round(float(s), 4), d.metadata.get("page")) for s, d in ranked[:5]]
     log.info(f"step=rerank done kept={len(top)}/{len(docs)} "
-             f"in {_time.time()-t0:.1f}s top5={best}")
+             f"in {_time.time()-t0:.1f}s device={_reranker_device} "
+             f"batch={config.RERANK_BATCH_SIZE} top5={best}")
     return top
+
 def query(question: str, top_k: int | None = None):
     """Retrieve + generate. Returns (answer, sources)."""
     from app import metrics
