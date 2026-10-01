@@ -11,6 +11,12 @@ Upload a company's annual report (100+ pages) and ask questions in plain English
 >
 > **Atlas:** ₹0.60 per equity share of ₹10 each, for the year ended March 31, 2026 [report.pdf, p. 3]. Subject to shareholder approval.
 
+## What it looks like
+
+![Atlas RAG chat UI answering "what is consolidated revenue for fiscal year 2026" with page citations (p. 58, p. 107, p. 124) and grounding sources](screenshot-1.png)
+
+*Ask in plain English → get numbers with clickable page citations (p. 58, p. 107, p. 124) plus a grounding-sources panel per answer.*
+
 ## How it works (plain English)
 
 ```
