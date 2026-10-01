@@ -252,6 +252,74 @@ side observation — CPU rerank of 30 docs takes 60–185 s/query and
 dominates end-to-end latency, worth a Prometheus look before any
 RERANK_TOPN increase.
 
+## E14 — Rerank truncation proof: LLM-as-judge + end-to-end (512 tokens)
+
+Hypothesis (from HANDOFF Lever 1): "Most relevance signal is in the first
+512 tokens; bge-reranker-v2-m3 supports 8192 but the tail adds compute, not
+signal." If true, truncating docs to 512 tokens before rerank cuts O(n^2)
+attention cost on long table chunks with minimal accuracy loss.
+
+Setup: 20-question user golden set (data/Eval Set, 2x10). For each question,
+hybrid RRF retrieves top-30 docs. GLM-5 (Bedrock Converse, same model as RAG)
+judges each (question, doc) pair's relevance on a 1-5 scale, twice:
+- Arm `full`  — judge sees the full doc content.
+- Arm `trunc` — judge sees only the first 512 tokens (bge-m3 tokenizer).
+Phase 1: per-question Spearman rho across the 30 docs + top-8 Jaccard.
+Phase 2: top-8 by each arm's judge scores -> generate -> RAGAS + deterministic.
+Cache: per-(q, doc_hash, arm) in `evals/results/.cache_truncation_exp.json`.
+Retries: throttle-only, max 3, exp backoff 2/4/8s. Heartbeat every 15s.
+Script: `evals/run_truncation_exp.py` + wrapper `run_truncation_exp.ps1`.
+
+Doc length distribution: 17/20 questions had >=1 doc > 512 tokens (89 docs
+truncated total, ~15% of the pool). Max token length: 1925 (p1-q10).
+
+| Phase 1 (LLM judge) | Value |
+|---|---|
+| Mean Spearman rho (all docs) | **0.7788** |
+| Mean top-8 Jaccard | **0.7121** |
+| Mean rho on actually-truncated docs only | 0.5539 |
+| Questions | 20 |
+
+| Phase 2 (RAGAS) | full | trunc | delta |
+|---|---|---|---|
+| faithfulness | 0.9093 | 0.9385 | +0.0292 |
+| answer_relevancy | 0.8898 | 0.8074 | **-0.0824** |
+| context_precision | 0.8912 | 0.8296 | **-0.0616** |
+| context_recall | 0.875 | 0.875 | 0.0 |
+
+| Phase 2 (deterministic) | full | trunc |
+|---|---|---|
+| number_match | 0.80 | 0.80 |
+| page_exact | 0.95 | 0.90 |
+| page_pm1 | 0.95 | 0.90 |
+
+Verdict: **PARTIALLY SUPPORTED.** The broad relevance signal IS in the
+first 512 tokens (rho 0.78, top-8 Jaccard 0.71), but it is not complete.
+On the docs that were actually truncated (token_len > 512), rho drops to
+0.55 — the tail carries real signal for ~15% of the pool, mostly long
+table chunks. End-to-end impact is small but non-zero: answer_relevancy
+-8%, context_precision -6%, 1 question lost page_match (p1-q7). The
+faithfulness +3% and context_recall 0% are within RAGAS judge noise
+(+-0.1, see E10). Net: truncating to 512 tokens trades ~6-8% on the
+retrieval-quality axes for the O(n^2) rerank speedup. Acceptable for the
+latency goal (23s -> 8-10s) if the 1-question page regression is tolerated;
+otherwise a higher cutoff (e.g. 1024 tokens) should be tested.
+
+Outliers worth noting:
+- p1-q10 (rho=0.0, max_tok=1925): longest-doc question; truncation fully
+  reorders the judge ranking. Both arms fail this probe (it is the
+  unanswerable FY2021-22 question) so no end-to-end impact.
+- p2-q10 (cut_rho=-0.1391): truncated-doc scores anti-correlate with
+  full-doc scores. The tail flips the judge's assessment for some docs.
+- p1-q9 (rho=1.0, n_cut=10): perfect correlation even with 10 truncated
+  docs — when the relevant content is in the head, truncation is free.
+
+Caveats: LLM judge noise is real (E10 measured +-0.11 faithfulness swings).
+The 0.78 rho is a single-run point estimate; a repeat run would tighten
+the band. The judge sees the doc as text (no table structure metadata),
+so the "tail signal" may partly be the judge reading table rows that
+the cross-encoder would also weight.
+
 ## Open items
 
 - Footnote extraction unverified (0 across runs) — manual audit vs known pages.
@@ -260,3 +328,8 @@ RERANK_TOPN increase.
 - qwen3-embedding:4b dense numbers never scored (rerunnable in one command).
 - Celery + fleet parallelization parked (Phase 2).
 - Per-upload strategy toggle + table toggle ideas parked.
+- E14 extension: fp16 reranker (Lever 2) — rerun E14 truncation with the
+  reranker in fp16 to measure the combined speedup vs accuracy trade.
+- E14 extension: test 1024-token cutoff as a middle ground (512 loses
+  ~6-8% on retrieval quality; 1024 may recover most of it at half the
+  rerank speedup).
