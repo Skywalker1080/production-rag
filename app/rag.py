@@ -380,6 +380,13 @@ def _reset_source(name: str) -> None:
             must=[FieldCondition(key="metadata.source", match=MatchValue(value=name))]
         ),
     )
+    # Corpus changed -> cached answers may be stale. v1: full flush.
+    try:
+        from app import cache as _cache
+
+        _cache.clear()
+    except Exception:
+        step_logger("cache").exception("cache clear on ingest failed")
 
 
 def split_and_upsert(docs: list, name: str, emit, log) -> int:
@@ -645,10 +652,11 @@ def _build_rag_message(context: str, question: str) -> str:
     )
 
 
-def _hybrid_search(question: str, k: int):
+def _hybrid_search(question: str, k: int, dense_vec: list | None = None):
     """Dense (bge-m3) + BM25 sparse retrieval fused with RRF.
 
     Returns (docs, debug) where debug records each hit's origin ranks.
+    Pass dense_vec to reuse the query embedding (cache + retrieve share it).
     """
     from langchain_core.documents import Document
     from qdrant_client.http.models import Fusion, FusionQuery, Prefetch
@@ -656,7 +664,11 @@ def _hybrid_search(question: str, k: int):
     client = get_qdrant_client()
     pre = config.HYBRID_PREFETCH
     try:
-        dense_vec = _finite(get_embeddings().embed_query(question), "query")
+        dense_vec = _finite(
+            dense_vec if dense_vec is not None
+            else get_embeddings().embed_query(question),
+            "query",
+        )
     except Exception:
         # bge-m3 can emit NaN for specific token combos (fp16 overflow);
         # Ollama then 500s. Fall back to BM25-only rather than dying.
@@ -767,20 +779,48 @@ def _rerank(question: str, docs: list, k: int, log) -> list:
     return top
 
 def query(question: str, top_k: int | None = None):
-    """Retrieve + generate. Returns (answer, sources)."""
+    """Retrieve + generate. Returns (answer, sources).
+
+    Semantic cache (Qdrant): the question is embedded ONCE and the vector is
+    reused by both the cache lookup and the hybrid retrieve, so a miss costs
+    no extra embedding call. A hit returns without any LLM call.
+    """
     from app import metrics
 
     k = top_k or config.TOP_K
     log = step_logger("query")
     log.info(f"start q={question[:120]!r} top_k={k} hybrid={config.HYBRID_SEARCH} "
-             f"rerank={config.RERANK}")
+             f"rerank={config.RERANK} cache={config.CACHE_ENABLED}")
 
-    # Step 1: retrieve similar chunks from Qdrant
+    # Step 0: embed once — reused by cache + Qdrant.
+    q_vec = None
+    if config.CACHE_ENABLED or config.HYBRID_SEARCH:
+        try:
+            q_vec = _finite(get_embeddings().embed_query(question), "query")
+        except Exception:
+            step_logger("query").warning(
+                "query embed failed, cache skipped / BM25-only fallback")
+            q_vec = None
+
+    # Step 1: semantic cache lookup (Qdrant cosine >= threshold -> HIT).
+    if config.CACHE_ENABLED and q_vec is not None:
+        from app import cache as _cache
+
+        with metrics.time_step("cache_lookup"):
+            hit = _cache.lookup(q_vec)
+        if hit is not None:
+            metrics.CACHE_HITS.inc()
+            log.info("step=cache HIT")
+            return hit
+        metrics.CACHE_MISSES.inc()
+        log.info("step=cache MISS")
+
+    # Step 2: retrieve similar chunks from Qdrant
     try:
         fetch_k = max(k, config.RERANK_TOPN) if config.RERANK else k
         with metrics.time_step("retrieve"):
             if config.HYBRID_SEARCH:
-                docs, dbg = _hybrid_search(question, fetch_k)
+                docs, dbg = _hybrid_search(question, fetch_k, dense_vec=q_vec)
             else:
                 store = get_vector_store()
                 docs = store.similarity_search(question, k=fetch_k)
@@ -823,6 +863,19 @@ def query(question: str, top_k: int | None = None):
         }
         for d in docs
     ]
+
+    # Step 4: fire-and-forget cache store (never blocks / never raises).
+    if config.CACHE_ENABLED and q_vec is not None:
+        try:
+            from app import cache as _cache
+
+            source_tags = sorted(
+                {str(d.metadata.get("source", "unknown")) for d in docs})
+            _cache.store(question, q_vec, resp.content, sources,
+                         source_tags=source_tags)
+        except Exception:
+            log.exception("cache store failed (non-fatal)")
+
     return resp.content, sources
 
 
@@ -838,3 +891,10 @@ def clear_collection() -> None:
     client = get_qdrant_client()
     if client.collection_exists(config.QDRANT_COLLECTION):
         client.delete_collection(config.QDRANT_COLLECTION)
+    # Corpus wiped -> cached answers are stale. v1: full flush.
+    try:
+        from app import cache as _cache
+
+        _cache.clear()
+    except Exception:
+        step_logger("cache").exception("cache clear on clear_collection failed")

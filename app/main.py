@@ -74,6 +74,23 @@ def health():
         log.exception("health check: Qdrant unreachable")
         qdrant_ok = False
     metrics.QDRANT_UP.set(1 if qdrant_ok else 0)
+    cache_ok = False
+    cache_points = 0
+    if qdrant_ok and config.CACHE_ENABLED:
+        try:
+            from app import cache as _cache
+
+            cc = _cache._client()
+            if cc.collection_exists(config.CACHE_COLLECTION):
+                cache_ok = True
+                cache_points = (
+                    cc.get_collection(config.CACHE_COLLECTION).points_count or 0)
+            else:
+                # No cache collection yet = healthy (nothing cached), not an error.
+                cache_ok = True
+        except Exception:
+            log.exception("health check: cache collection unreachable")
+            cache_ok = False
     return {
         "status": "ok",
         "qdrant_ok": qdrant_ok,
@@ -81,6 +98,11 @@ def health():
         "llm_model": config.BEDROCK_MODEL_ID,
         "embed_model": config.BEDROCK_EMBED_MODEL_ID,
         "chunks": rag.collection_count() if qdrant_ok else 0,
+        "cache_enabled": config.CACHE_ENABLED,
+        "cache_ok": cache_ok,
+        "cache_collection": config.CACHE_COLLECTION,
+        "cache_threshold": config.CACHE_THRESHOLD,
+        "cache_points": cache_points,
     }
 
 

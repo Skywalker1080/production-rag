@@ -50,6 +50,15 @@ RERANK_BATCH_SIZE = int(os.getenv("RERANK_BATCH_SIZE", "16"))
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
+# --- Semantic cache (Qdrant collection, no extra infra) ---
+# Lookup: vector search on question embedding, hit if top-1 cosine >= threshold.
+CACHE_ENABLED = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+CACHE_COLLECTION = os.getenv(
+    "CACHE_COLLECTION", f"{QDRANT_COLLECTION}_cache")
+CACHE_THRESHOLD = float(os.getenv("CACHE_THRESHOLD", "0.92"))
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "604800"))  # 7 days, 0 = no expiry
+CACHE_TOP_K = int(os.getenv("CACHE_TOP_K", "1"))
+
 # --- Logging ---
 LOG_DIR = os.getenv("LOG_DIR", "./logs")
 LOG_FILE = os.getenv("LOG_FILE", "./logs/rag.log")

@@ -1,7 +1,37 @@
-# Redis Semantic Cache — Implementation Plan
+# Semantic Cache — Implementation Plan (Qdrant)
 
-Status: **PLANNED, not yet implemented.** Decisions locked: full-flush
-invalidation on any ingest/clear; implement on next session.
+Status: **IMPLEMENTED on Qdrant (no Redis).** See `app/cache.py`
+(`<QDRANT_COLLECTION>_cache`). Decisions locked: full-flush
+invalidation on any ingest/clear; threshold 0.92 starting point.
+
+## Decision record (2026-10-01)
+
+### Qdrant, not RedisVL, for the semantic cache
+A semantic cache is just `vector search(question embedding) -> hit if
+score >= threshold -> return cached answer`. Qdrant already does this; adding
+Redis Stack + RedisVL would mean operating, backing up, and tuning a second
+vector DB for the same operation. From first principles there was no new
+capability to buy — only new infra to own. So the cache is a second Qdrant
+collection (`app/cache.py`), zero new dependencies (`qdrant-client` was
+already required). Redis would only earn its place at high QPS / strict
+p99 / true per-point TTL needs — none of which apply here (Qdrant lookup is
+~5–20ms local vs seconds for LLM `generate`; TTL is emulated as a
+`created_at` range filter + best-effort expiry).
+
+### Dense embeddings, not sparse, for the cache key
+Retrieval and caching ask different questions. Document retrieval asks
+"which chunks contain the answer?" — exact terms (`FY2026`, figures) matter,
+so hybrid dense+BM25 is right there. Cache lookup asks "does this question
+*mean* the same as a cached one?" — a paraphrase judgment over short
+question pairs. Dense vectors put paraphrases nearby ("What's FY26 revenue?"
+vs "How much money did the company make in fiscal 2026?"); BM25 scores
+token overlap, so it misses paraphrases (defeating the point of a semantic
+cache) and false-hits on same-words-different-meaning pairs ("revenue in
+FY25?" vs "FY26?" — one token apart, wrong year's answer returned with
+confidence). Dense's own weakness (near-identical questions differing in a
+critical entity also embed close) is handled by the high 0.92 threshold,
+tunable via `evals/run_user_eval.py`. Bonus: the dense query vector is
+already computed for retrieval and reused for lookup — zero extra cost.
 
 ## Goal
 

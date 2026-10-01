@@ -40,6 +40,21 @@ QDRANT_UP = Gauge(
     "1 if Qdrant reachable on last health check, else 0",
 )
 
+CACHE_HITS = Counter(
+    "rag_cache_hits_total",
+    "Semantic cache hits (returned without LLM call)",
+)
+
+CACHE_MISSES = Counter(
+    "rag_cache_misses_total",
+    "Semantic cache misses (fell through to RAG pipeline)",
+)
+
+CACHE_STORES = Counter(
+    "rag_cache_stores_total",
+    "Answers written to the semantic cache",
+)
+
 
 @contextmanager
 def time_step(step: str):
