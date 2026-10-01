@@ -21,12 +21,14 @@ from qdrant_client.http.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    PointIdsList,
     PointStruct,
     VectorParams,
 )
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app import config
+from app.delta import chunk_point_id, is_legacy_point, page_hash, plan_delta
 from app.logging_setup import step_logger
 
 
@@ -490,13 +492,13 @@ def embed_and_upsert(chunks: list, name: str, emit, log) -> int:
                 sparse_vecs.extend(_to_sparse(v) for v in bm25.passage_embed(batch))
         # Qdrant caps request payloads (~32 MB): batch the upsert, critical
         # for wide vectors (2560-dim x 1300 chunks ≈ 43 MB in one shot).
+        # IDs are stable per unit+index (see app.delta) so re-ingesting
+        # overwrites the same points, never dupes.
+        assigned = _assign_point_ids(chunks, name)
         for s in range(0, total, config.UPSERT_BATCH_SIZE):
             points = [
                 PointStruct(
-                    id=uuid.uuid5(
-                        uuid.NAMESPACE_URL,
-                        f"{config.QDRANT_COLLECTION}:{name}:{i}",
-                    ).hex,
+                    id=assigned[i][1],
                     vector=(
                         {"dense": vectors[i], "bm25": sparse_vecs[i]}
                         if sparse_vecs
@@ -505,6 +507,7 @@ def embed_and_upsert(chunks: list, name: str, emit, log) -> int:
                     payload={
                         "page_content": chunks[i].page_content,
                         "metadata": chunks[i].metadata,
+                        "content_hash": chunks[i].metadata.get("content_hash"),
                     },
                 )
                 for i in range(s, min(s + config.UPSERT_BATCH_SIZE, total))
@@ -530,6 +533,147 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
     return embed_and_upsert(chunks, name, emit, log)
 
 
+class _FullFallback(Exception):
+    """Diff/fetch unavailable -> caller runs the legacy full path."""
+
+
+def _tag_doc_hashes(docs: list) -> None:
+    """Stamp content_hash on each page/table doc (survives splitting)."""
+    for d in docs:
+        md = d.metadata if isinstance(d.metadata, dict) else {}
+        d.metadata = md
+        md["content_hash"] = page_hash(d.page_content or "")
+
+
+def _unit_key_of(chunk) -> tuple:
+    """Prose -> ("p", page); table grid -> ("t", hash12)."""
+    md = chunk.metadata or {}
+    if md.get("table"):
+        return ("t", str(md.get("content_hash") or "?")[:12])
+    return ("p", str(md.get("page")))
+
+
+def _assign_point_ids(chunks: list, name: str) -> list:
+    """[(chunk, stable_pid)] with per-unit occurrence indices."""
+    counters: dict = {}
+    out = []
+    for c in chunks:
+        key = _unit_key_of(c)
+        i = counters.get(key, 0)
+        counters[key] = i + 1
+        kind, ukey = key
+        out.append((c, chunk_point_id(
+            config.QDRANT_COLLECTION, name, kind, ukey, i)))
+    return out
+
+
+def _fetch_source_units(name: str) -> dict:
+    """Scroll existing points for source -> {unit_key: {hashes, ids, legacy}}."""
+    client = get_qdrant_client()
+    units: dict = {}
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            collection_name=config.QDRANT_COLLECTION,
+            scroll_filter=Filter(
+                must=[FieldCondition(
+                    key="metadata.source", match=MatchValue(value=name))]
+            ),
+            limit=512,
+            offset=offset,
+            # NB: page/table live under nested "metadata"; page_content is
+            # excluded to keep the scroll light (hashes suffice for diffing).
+            with_payload=["metadata", "content_hash"],
+            with_vectors=False,
+        )
+        for p in points:
+            pl = p.payload or {}
+            md = pl.get("metadata") or {}
+            legacy = is_legacy_point(pl)
+            if md.get("table"):
+                key = ("t", str(pl.get("content_hash") or "?")[:12])
+            else:
+                key = ("p", str(md.get("page")))
+            u = units.setdefault(key, {"hashes": set(), "ids": [], "legacy": False})
+            if pl.get("content_hash"):
+                u["hashes"].add(pl["content_hash"])
+            u["ids"].append(str(p.id))
+            if legacy:
+                u["legacy"] = True
+        if offset is None:
+            break
+    return units
+
+
+def _delete_point_ids(ids: set) -> None:
+    get_qdrant_client().delete(
+        collection_name=config.QDRANT_COLLECTION,
+        points_selector=PointIdsList(points=list(ids)),
+    )
+
+
+def _ingest_delta(chunks: list, name: str, emit, log) -> int:
+    """Embed+upsert only changed units; delete stale ids after. Returns total.
+
+    Raises _FullFallback when diffing is impossible (fresh/legacy source,
+    scroll failure) so the caller runs the legacy full path.
+    """
+    try:
+        old = _fetch_source_units(name)
+    except Exception as e:
+        raise _FullFallback(f"scroll failed: {e}")
+    if not old:
+        raise _FullFallback("fresh source")
+    if any(u["legacy"] for u in old.values()):
+        raise _FullFallback("legacy points (one full reset, then delta)")
+
+    new_groups: dict = {}
+    for c in chunks:
+        new_groups.setdefault(_unit_key_of(c), []).append(c)
+    old_view = {
+        k: {"hash": next(iter(u["hashes"])) if len(u["hashes"]) == 1 else None,
+            "ids": u["ids"]}
+        for k, u in old.items()
+    }
+    new_view = {k: {"hash": v[0].metadata.get("content_hash")} for k, v in new_groups.items()}
+    plan = plan_delta(old_view, new_view)
+    # Skip only when hash AND chunk count match (dup "?" pages stay correct).
+    skip = {k for k in plan["skip"]
+            if len(old[k]["ids"]) == len(new_groups[k])}
+    changed_keys = plan["changed"] | (plan["skip"] - skip)
+    to_embed = [c for k in changed_keys for c in new_groups.get(k, [])]
+    skipped_n = sum(len(new_groups[k]) for k in skip)
+
+    if not to_embed and not plan["removed"]:
+        total_old = sum(len(u["ids"]) for u in old.values())
+        emit("done", f"no changes — {total_old} chunks already indexed")
+        return total_old
+
+    if to_embed:
+        embed_and_upsert(to_embed, name, emit, log)
+    else:
+        emit("upsert", "delta: nothing to embed, removing stale points…")
+    if skipped_n:
+        emit("upsert", f"delta: skipped {skipped_n} unchanged chunks")
+
+    new_ids = {pid for _, pid in _assign_point_ids(chunks, name)}
+    old_ids = {i for u in old.values() for i in u["ids"]}
+    stale = old_ids - new_ids
+    if stale:
+        emit("upsert", f"delta: deleting {len(stale)} stale points…")
+        _delete_point_ids(stale)
+    # Corpus changed -> cached answers may be stale (mirrors _reset_source).
+    try:
+        from app import cache as _cache
+
+        _cache.clear()
+    except Exception:
+        step_logger("cache").exception("cache clear on delta ingest failed")
+    emit("done", f"delta ingested {len(to_embed)} new chunks, "
+                 f"{skipped_n} unchanged, {len(new_ids)} total")
+    return len(new_ids)
+
+
 def _make_emit(log, name, on_step):
     def emit(step: str, detail: str):
         log.info(f"step={step} {detail} file={name}")
@@ -548,6 +692,8 @@ def ingest_pdf(
 
     Consistency: old Qdrant points for this source are deleted only AFTER
     a successful parse+split, so a failed big-file retry keeps the old index.
+    Delta: re-uploads embed only changed pages (stable point IDs); falls
+    back to the full path for fresh/legacy sources or scroll failures.
     """
     name = source_name or os.path.basename(pdf_path)
     log = step_logger("ingest")
@@ -573,17 +719,27 @@ def ingest_pdf(
         ]
         docs = group_page_docs(rows, name)
         emit("load_pdf", f"parsed {len(docs)} pages ({len(elements)} raw elements)")
+        _tag_doc_hashes(docs)
         chunks = split_docs(docs, name, emit, log)
     except Exception:
         log.exception(f"FAILED step=load_pdf file={name}")
         raise
+    if not chunks:
+        log.info(f"empty parse file={name} — keeping old index")
+        emit("done", "no extractable text — nothing to index")
+        return 0
+    try:
+        ensure_collection()
+    except Exception:
+        log.exception(f"FAILED step=ensure_collection file={name} (Qdrant?)")
+        raise
+    try:
+        return _ingest_delta(chunks, name, emit, log)
+    except _FullFallback as e:
+        log.info(f"delta unavailable ({e}) — full ingest file={name}")
     try:
         # Old index is replaced only once the replacement is ready.
-        # Empty parse keeps the old index (returns 0, no reset).
-        if chunks:
-            _reset_source(name)
-        else:
-            log.info(f"empty parse file={name} — keeping old index")
+        _reset_source(name)
     except Exception:
         log.exception(f"FAILED step=ensure_collection file={name} (Qdrant?)")
         raise
@@ -650,6 +806,7 @@ def ingest_elements(
                 for e in items]
         docs = group_page_docs(rows, name)
         emit("load_pdf", f"grouped {len(items)} elements into {len(docs)} pages")
+        _tag_doc_hashes(docs)
         chunks = split_docs(docs, name, emit, log)
     except Exception:
         log.exception(f"FAILED step=load_pdf file={name}")
