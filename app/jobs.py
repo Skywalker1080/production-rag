@@ -100,3 +100,64 @@ def run_ingest_job(job_id: str, pdf_path: str, filename: str) -> None:
             progress=_progress_for("failed", ""),
         )
         log.exception(f"job failed id={job_id} file={filename}")
+
+
+def run_ingest_s3_job(
+    job_id: str,
+    s3_bucket: str,
+    s3_key: str,
+    filename: str,
+    upload_id: str | None = None,
+    expected_sha256: str | None = None,
+) -> None:
+    """Background worker for S3-staged big PDFs: pull from S3, then ingest.
+
+    Keeps the same job contract as run_ingest_job so the UI poll is unchanged.
+    Old Qdrant points are replaced only after successful parse (see rag).
+    """
+    from app import uploads as _uploads
+
+    if upload_id:
+        try:
+            _uploads._set(upload_id, status=_uploads.STATUS_PARSING, job_id=job_id)
+        except Exception:
+            pass
+    _update(job_id, status=STATUS_PROCESSING, step="load_pdf",
+            detail="downloading from S3…",
+            progress=_progress_for("load_pdf", ""))
+
+    def on_step(step: str, detail: str):
+        _update(job_id, status=STATUS_PROCESSING, step=step, detail=detail,
+                progress=_progress_for(step, detail))
+        log.info(f"job id={job_id} step={step} {detail} (s3)")
+
+    try:
+        n = rag.ingest_pdf_from_s3(
+            s3_bucket, s3_key, source_name=filename,
+            on_step=on_step, expected_sha256=expected_sha256,
+        )
+        _update(
+            job_id, status=STATUS_COMPLETED, step="done",
+            detail=f"ingested {n} chunks", chunks=n,
+            progress=_progress_for("done", ""),
+        )
+        if upload_id:
+            try:
+                _uploads._set(upload_id, status=_uploads.STATUS_DONE)
+            except Exception:
+                pass
+        log.info(f"job done id={job_id} file={filename} chunks={n} (s3)")
+    except Exception as e:
+        _update(
+            job_id, status=STATUS_FAILED, step="failed",
+            detail="failed — see logs/rag.log for the step + traceback",
+            error=f"{type(e).__name__}: {e}",
+            progress=_progress_for("failed", ""),
+        )
+        if upload_id:
+            try:
+                _uploads._set(upload_id, status=_uploads.STATUS_FAILED,
+                               error=f"{type(e).__name__}: {e}")
+            except Exception:
+                pass
+        log.exception(f"job failed id={job_id} file={filename} (s3)")

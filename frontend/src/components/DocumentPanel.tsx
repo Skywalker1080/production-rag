@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { UploadedDocument } from '../types';
-import { uploadPDF, getJobStatus, getStats, deleteDocuments } from '../api/client';
+import { uploadPDF, uploadPDFBig, shouldUseMultipart, getJobStatus, getStats, deleteDocuments } from '../api/client';
 
 export default function DocumentPanel() {
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
@@ -34,7 +34,18 @@ export default function DocumentPanel() {
     setDocuments(prev => [doc, ...prev]);
 
     try {
-      const result = await uploadPDF(file);
+      // Dual path: small files keep single POST; big files go direct-to-S3.
+      const result = shouldUseMultipart(file)
+        ? await uploadPDFBig(file, (done, total) => {
+            setDocuments(prev =>
+              prev.map(d =>
+                d.name === file.name
+                  ? { ...d, status: 'uploading' as const, progress: Math.round((done / total) * 100) }
+                  : d,
+              ),
+            );
+          })
+        : await uploadPDF(file);
       
       const pollStatus = async () => {
         const job = await getJobStatus(result.job_id);
@@ -212,6 +223,9 @@ export default function DocumentPanel() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 <span className="flex-1 truncate text-xs text-[#c6cedc]">{doc.name}</span>
+                {doc.status === 'uploading' && typeof doc.progress === 'number' ? (
+                  <span className="text-[11px] text-[#8d97aa]">{doc.progress}%</span>
+                ) : null}
                 {getStatusIcon(doc.status)}
               </li>
             ))}

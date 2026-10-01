@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import config, jobs, metrics, rag
+from app import config, jobs, metrics, rag, uploads
 from app.logging_setup import setup_logging, step_logger
 
 setup_logging()
@@ -61,6 +61,22 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 class AskRequest(BaseModel):
     question: str
     top_k: int | None = None
+
+
+class UploadInitRequest(BaseModel):
+    filename: str
+    size_bytes: int
+    sha256: str | None = None
+
+
+class UploadCompletePart(BaseModel):
+    part_number: int
+    etag: str
+
+
+class UploadCompleteRequest(BaseModel):
+    parts: list[UploadCompletePart]
+    sha256: str | None = None
 
 
 @app.get("/health")
@@ -122,6 +138,97 @@ def upload_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
         status_code=202,
         content={"job_id": job_id, "status": "queued", "filename": file.filename},
     )
+
+
+@app.post("/api/uploads/init")
+def uploads_init(req: UploadInitRequest):
+    """Start an S3 multipart session; returns presigned PUT urls per part."""
+    try:
+        sess = uploads.init_session(req.filename, req.size_bytes, req.sha256)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        log.exception("uploads init FAILED (S3/config?)")
+        raise HTTPException(500, str(e))
+    return {
+        **sess,
+        "threshold_mb": config.S3_UPLOAD_THRESHOLD_MB,
+        "sha256_required": True,
+    }
+
+
+@app.get("/api/uploads/{upload_id}")
+def uploads_status(upload_id: str):
+    sess = uploads.get_session(upload_id)
+    if not sess:
+        raise HTTPException(404, "Unknown upload id.")
+    try:
+        uploaded = uploads.list_uploaded_parts(upload_id)
+    except Exception:
+        uploaded = []
+    return {**sess, "uploaded_parts": uploaded}
+
+
+@app.post("/api/uploads/{upload_id}/complete", status_code=202)
+def uploads_complete(upload_id: str, req: UploadCompleteRequest, background_tasks: BackgroundTasks):
+    sess = uploads.get_session(upload_id)
+    if not sess:
+        raise HTTPException(404, "Unknown upload id.")
+    # Enforce locked decision: SHA256 required.
+    claimed = (req.sha256 or "").lower() or (sess.get("sha256_client") or "").lower()
+    if not claimed:
+        raise HTTPException(400, "sha256 is required for big uploads.")
+    try:
+        staged = uploads.complete_session(
+            upload_id,
+            [{"part_number": p.part_number, "etag": p.etag} for p in req.parts],
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        log.exception(f"uploads complete FAILED id={upload_id}")
+        raise HTTPException(500, str(e))
+    job_id = jobs.create_job(staged["filename"])
+    uploads._set(upload_id, job_id=job_id, status=uploads.STATUS_PARSING)
+    background_tasks.add_task(
+        jobs.run_ingest_s3_job,
+        job_id, staged["s3_bucket"], staged["s3_key"],
+        staged["filename"], upload_id, claimed,
+    )
+    return JSONResponse(
+        status_code=202,
+        content={"job_id": job_id, "status": "queued",
+                 "filename": staged["filename"], "upload_id": upload_id},
+    )
+
+
+@app.post("/api/uploads/{upload_id}/abort")
+def uploads_abort(upload_id: str):
+    sess = uploads.get_session(upload_id)
+    if not sess:
+        raise HTTPException(404, "Unknown upload id.")
+    try:
+        uploads.abort_session(upload_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"aborted": True, "upload_id": upload_id}
+
+
+@app.post("/api/uploads/{upload_id}/refresh")
+def uploads_refresh(upload_id: str):
+    """Fresh presigned urls for missing parts (resume after failure/expiry)."""
+    sess = uploads.get_session(upload_id)
+    if not sess:
+        raise HTTPException(404, "Unknown upload id.")
+    if sess["status"] not in (uploads.STATUS_INITIATED, uploads.STATUS_FAILED):
+        raise HTTPException(400, f"Cannot refresh from status={sess['status']}.")
+    try:
+        return uploads.refresh_urls(upload_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        log.exception(f"uploads refresh FAILED id={upload_id}")
+        raise HTTPException(500, str(e))
 
 
 @app.get("/api/jobs/{job_id}")

@@ -389,9 +389,8 @@ def _reset_source(name: str) -> None:
         step_logger("cache").exception("cache clear on ingest failed")
 
 
-def split_and_upsert(docs: list, name: str, emit, log) -> int:
-    """Split page docs into chunks, embed (parallel), upsert. Returns count."""
-    # Step: split into chunks (tables split by row, headers repeated)
+def split_docs(docs: list, name: str, emit, log) -> list:
+    """Split page docs into chunks (no Qdrant writes)."""
     try:
         emit("split", "splitting into chunks…")
         splitter = RecursiveCharacterTextSplitter(
@@ -410,7 +409,11 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
 
     for d in chunks:
         d.metadata["source"] = name
+    return chunks
 
+
+def embed_and_upsert(chunks: list, name: str, emit, log) -> int:
+    """Embed chunks + upsert to Qdrant. Returns count."""
     if not chunks:
         emit("done", "no extractable text — nothing to index")
         return 0
@@ -521,6 +524,12 @@ def split_and_upsert(docs: list, name: str, emit, log) -> int:
     return len(chunks)
 
 
+def split_and_upsert(docs: list, name: str, emit, log) -> int:
+    """Backward-compat wrapper: split then embed+upsert (no reset)."""
+    chunks = split_docs(docs, name, emit, log)
+    return embed_and_upsert(chunks, name, emit, log)
+
+
 def _make_emit(log, name, on_step):
     def emit(step: str, detail: str):
         log.info(f"step={step} {detail} file={name}")
@@ -535,16 +544,15 @@ def ingest_pdf(
     source_name: str | None = None,
     on_step: Callable[[str, str], None] | None = None,
 ) -> int:
-    """Load a PDF locally, page-group, split, embed, upsert. Returns count."""
+    """Load a PDF locally, page-group, split, embed, upsert. Returns count.
+
+    Consistency: old Qdrant points for this source are deleted only AFTER
+    a successful parse+split, so a failed big-file retry keeps the old index.
+    """
     name = source_name or os.path.basename(pdf_path)
     log = step_logger("ingest")
     log.info(f"start file={name} path={pdf_path}")
     emit = _make_emit(log, name, on_step)
-    try:
-        _reset_source(name)
-    except Exception:
-        log.exception(f"FAILED step=ensure_collection file={name} (Qdrant?)")
-        raise
     try:
         emit("load_pdf", f"parsing PDF (strategy={config.UNSTRUCTURED_STRATEGY})…")
         loader = UnstructuredPDFLoader(
@@ -565,10 +573,63 @@ def ingest_pdf(
         ]
         docs = group_page_docs(rows, name)
         emit("load_pdf", f"parsed {len(docs)} pages ({len(elements)} raw elements)")
+        chunks = split_docs(docs, name, emit, log)
     except Exception:
         log.exception(f"FAILED step=load_pdf file={name}")
         raise
-    return split_and_upsert(docs, name, emit, log)
+    try:
+        # Old index is replaced only once the replacement is ready.
+        # Empty parse keeps the old index (returns 0, no reset).
+        if chunks:
+            _reset_source(name)
+        else:
+            log.info(f"empty parse file={name} — keeping old index")
+    except Exception:
+        log.exception(f"FAILED step=ensure_collection file={name} (Qdrant?)")
+        raise
+    return embed_and_upsert(chunks, name, emit, log)
+
+
+def ingest_pdf_from_s3(
+    s3_bucket: str,
+    s3_key: str,
+    source_name: str,
+    on_step: Callable[[str, str], None] | None = None,
+    expected_sha256: str | None = None,
+) -> int:
+    """Download staged PDF from S3 to temp, optionally SHA256-check, ingest.
+
+    Backend never buffers the upload; the worker pulls from S3 (source of
+    truth). Temp file is always cleaned up.
+    """
+    import hashlib
+    import tempfile
+
+    from app.logging_setup import step_logger as _sl
+
+    log = _sl("ingest")
+    emit = _make_emit(log, source_name, on_step)
+    emit("load_pdf", f"downloading s3://{s3_bucket}/{s3_key}…")
+    from app.uploads import s3_client as _s3c
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    tmp_path = tmp.name
+    tmp.close()
+    try:
+        _s3c().download_file(s3_bucket, s3_key, tmp_path)
+        if expected_sha256:
+            h = hashlib.sha256()
+            with open(tmp_path, "rb") as f:
+                for blk in iter(lambda: f.read(8 * 1024 * 1024), b""):
+                    h.update(blk)
+            if h.hexdigest() != expected_sha256.lower():
+                raise ValueError("SHA256 mismatch after S3 download.")
+        return ingest_pdf(tmp_path, source_name=source_name, on_step=on_step)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
 
 
 def ingest_elements(
@@ -585,19 +646,21 @@ def ingest_elements(
     log.info(f"start pre-parsed file={name} elements={len(items)}")
     emit = _make_emit(log, name, on_step)
     try:
-        _reset_source(name)
-    except Exception:
-        log.exception(f"FAILED step=ensure_collection file={name} (Qdrant?)")
-        raise
-    try:
         rows = [(e.get("type"), e.get("page"), e.get("text"), e.get("html"))
                 for e in items]
         docs = group_page_docs(rows, name)
         emit("load_pdf", f"grouped {len(items)} elements into {len(docs)} pages")
+        chunks = split_docs(docs, name, emit, log)
     except Exception:
         log.exception(f"FAILED step=load_pdf file={name}")
         raise
-    return split_and_upsert(docs, name, emit, log)
+    try:
+        if chunks:
+            _reset_source(name)
+    except Exception:
+        log.exception(f"FAILED step=ensure_collection file={name} (Qdrant?)")
+        raise
+    return embed_and_upsert(chunks, name, emit, log)
 
 SYSTEM_PROMPT = (
     "You are Atlas, a RAG specialist. Your ONLY job is answering questions "

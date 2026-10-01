@@ -50,6 +50,14 @@ RERANK_BATCH_SIZE = int(os.getenv("RERANK_BATCH_SIZE", "16"))
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
+# --- S3 staging for big PDFs (multipart, direct-to-S3) ---
+# Locked: 16MB parts, 50MB threshold, SHA256 required, real S3, BackgroundTasks worker.
+S3_STAGING_BUCKET = os.getenv("S3_STAGING_BUCKET", "")
+S3_PART_SIZE_MB = int(os.getenv("S3_PART_SIZE_MB", "16"))
+S3_UPLOAD_THRESHOLD_MB = int(os.getenv("S3_UPLOAD_THRESHOLD_MB", "50"))
+S3_PRESIGNED_EXPIRY_SECS = int(os.getenv("S3_PRESIGNED_EXPIRY_SECS", "3600"))
+UPLOAD_DB_PATH = os.getenv("UPLOAD_DB_PATH", os.path.join(DATA_DIR, "uploads.db"))
+
 # --- Semantic cache (Qdrant collection, no extra infra) ---
 # Lookup: vector search on question embedding, hit if top-1 cosine >= threshold.
 CACHE_ENABLED = os.getenv("CACHE_ENABLED", "true").lower() == "true"
